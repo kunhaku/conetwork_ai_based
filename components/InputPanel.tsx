@@ -8,6 +8,7 @@ interface InputPanelProps {
   status: PipelineStatus;
   externalTopic?: string | null;
   externalSeeds?: string[] | null;
+  llmLabel?: string;
 }
 
 const STEP_ORDER: PipelineStage[] = ['agent-s', 'agent-q', 'agent-x', 'agent-f', 'agent-r', 'complete'];
@@ -20,7 +21,7 @@ const STEPS = [
   { id: 'agent-r', label: 'Analyze', desc: 'Strategic Report' },
 ];
 
-const InputPanel: React.FC<InputPanelProps> = ({ onGenerate, status, externalTopic, externalSeeds }) => {
+const InputPanel: React.FC<InputPanelProps> = ({ onGenerate, status, externalTopic, externalSeeds, llmLabel }) => {
   const [seeds, setSeeds] = useState(SAMPLE_SEEDS);
   const [topic, setTopic] = useState(SAMPLE_TOPIC);
   const isLoading = status.stage !== 'idle' && status.stage !== 'complete' && status.stage !== 'error';
@@ -75,6 +76,9 @@ const InputPanel: React.FC<InputPanelProps> = ({ onGenerate, status, externalTop
           NexusGraph
         </h1>
         <p className="text-xs text-gray-500 mt-1 pl-9">AI-Powered Market Intelligence</p>
+        {llmLabel && (
+          <p className="text-[10px] text-blue-600 mt-1 pl-9">LLM: {llmLabel}</p>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5 flex-1">

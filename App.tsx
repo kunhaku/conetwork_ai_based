@@ -12,6 +12,7 @@ type ViewMode = 'graph' | 'report';
 const API_BASE = import.meta.env.VITE_API_BASE || '/api/run';
 const PROXY_TOKEN = import.meta.env.VITE_PROXY_TOKEN || '';
 const pingUrl = API_BASE.endsWith('/run') ? API_BASE.replace(/\/run$/, '/ping') : `${API_BASE}/ping`;
+const LLM_LABEL = import.meta.env.VITE_LLM_MODEL ? `OpenAI (${import.meta.env.VITE_LLM_MODEL})` : 'OpenAI (default gpt-4o-mini)';
 
 const App: React.FC = () => {
   const [graphData, setGraphData] = useState<UnifiedGraph | null>(null);
@@ -88,6 +89,7 @@ const App: React.FC = () => {
         status={status} 
         externalTopic={inferredTopic}
         externalSeeds={inferredSeeds}
+        llmLabel={LLM_LABEL}
       />
 
       {/* 2. Middle Content Area */}

@@ -8,10 +8,9 @@ import {
     AGENT_T_SYSTEM_INSTRUCTION,
     AGENT_T_REVERSE_SYSTEM_INSTRUCTION
 } from "../constants";
+import { callLLM } from "./llmClient";
 
 type ChatOptions = { temperature?: number; model?: string };
-const API_BASE = import.meta.env.VITE_API_BASE || '/api/run';
-const PROXY_TOKEN = import.meta.env.VITE_PROXY_TOKEN || '';
 
 // Helper to parse JSON from Markdown code blocks or raw text
 const safeParseJSON = (text: string) => {
@@ -36,37 +35,12 @@ const callPuterChat = async (
   userContent: string,
   options: ChatOptions = {}
 ): Promise<string> => {
-  const endpoint = API_BASE;
-  console.info('[api/run] calling backend', { model: options.model || 'gpt-5.1', endpoint });
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (PROXY_TOKEN) {
-    headers['Authorization'] = `Bearer ${PROXY_TOKEN}`;
-  }
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: options.model || 'gpt-5.1',
-      systemInstruction,
-      userContent,
-      temperature: options.temperature ?? 0.1,
-    })
+  return callLLM({
+    systemInstruction,
+    userContent,
+    model: options.model,
+    temperature: options.temperature ?? 0.1,
   });
-
-  const data = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(data?.error || `API /api/run failed with status ${response.status}`);
-  }
-
-  console.info('[api/run] success');
-
-  const content = data?.content ?? data?.choices?.[0]?.message?.content ?? data?.text;
-  if (!content) {
-    throw new Error("No content returned from /api/run. Please check server logs.");
-  }
-  if (typeof content === "string") return content;
-  return JSON.stringify(content);
 };
 
 // --- STAGE 0: AGENT T (Topic Inference) ---
