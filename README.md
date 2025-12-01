@@ -27,11 +27,19 @@ Notes:
   - Required env (Workers → Settings → Variables):
     - `PROXY_TOKEN`: a shared token for Authorization header (optional but recommended).
     - `PUTER_API_URL` (optional): defaults to `https://api.puter.com/v2/openai/chat/completions`.
-    - `OPENAI_API_KEY` (optional): fallback if Puter is blocked.
+    - `OPENAI_API_KEY` (optional): fallback if Puter is blocked. Set this to force skipping Puter entirely.
     - `OPENAI_MODEL` (optional): default `gpt-4o-mini`.
     - `OPENAI_BASE_URL` (optional): override OpenAI endpoint (e.g., a compatible gateway URL).
-    - `REQUEST_TIMEOUT_MS` (optional): default `15000`.
+    - `REQUEST_TIMEOUT_MS` (optional): default `30000`.
   - Routes: map `/api/run` and `/api/ping` to this Worker (e.g., `https://yourdomain.com/api/*`).
   - From frontend, set `VITE_API_BASE` to your Worker endpoint (e.g., `https://yourdomain.com/api/run`) or keep default `/api/run` if behind same domain proxy.
   - If you set `PROXY_TOKEN` on the Worker, mirror it in `.env.local` as `VITE_PROXY_TOKEN` so requests include the Authorization header.
-- To verify API server connectivity (proxy mode), hit `GET /api/ping` locally: `curl http://localhost:8787/api/ping`.
+  - To verify API server connectivity (proxy mode), hit `GET /api/ping` locally: `curl http://localhost:8787/api/ping`.
+
+#### Using free_chatgpt_api instead of Puter
+If you want to use https://github.com/popjane/free_chatgpt_api (base `https://free.v36.cm/v1`), set these env vars on your Worker (or local server):
+- `OPENAI_API_KEY`: your free_chatgpt_api key.
+- `OPENAI_BASE_URL`: `https://free.v36.cm/v1`.
+- `OPENAI_MODEL`: e.g., `gpt-4o-mini` (supported by the free endpoint).
+
+With `OPENAI_API_KEY` set, the proxy skips Puter entirely and speaks OpenAI-compatible JSON to the free endpoint.

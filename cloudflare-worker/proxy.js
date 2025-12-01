@@ -55,8 +55,8 @@ export default {
       temperature,
     };
 
-    // timeout guard
-    const timeoutMs = Number(env.REQUEST_TIMEOUT_MS || 15000);
+    // timeout guard (Puter can be slow; default to 30s)
+    const timeoutMs = Number(env.REQUEST_TIMEOUT_MS || 30000);
     const abort = AbortSignal.timeout(timeoutMs);
 
     // If OPENAI_API_KEY is present, use OpenAI directly and skip Puter
@@ -98,7 +98,10 @@ export default {
           headers: { 'Content-Type': 'application/json', ...corsHeaders },
         });
       } catch (fallbackErr) {
-        return new Response(JSON.stringify({ error: fallbackErr.message || 'openai_error' }), {
+        const msg = (fallbackErr?.name === 'TimeoutError' || `${fallbackErr?.message || ''}`.toLowerCase().includes('timeout'))
+          ? `openai upstream timeout after ${timeoutMs}ms`
+          : fallbackErr?.message || 'openai_error';
+        return new Response(JSON.stringify({ error: msg }), {
           status: 502,
           headers: { 'Content-Type': 'application/json', ...corsHeaders },
         });
@@ -132,7 +135,10 @@ export default {
         headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     } catch (err) {
-      return new Response(JSON.stringify({ error: err.message || 'puter_error' }), {
+      const msg = (err?.name === 'TimeoutError' || `${err?.message || ''}`.toLowerCase().includes('timeout'))
+        ? `puter upstream timeout after ${timeoutMs}ms (increase REQUEST_TIMEOUT_MS or set OPENAI_API_KEY to skip Puter)`
+        : err?.message || 'puter_error';
+      return new Response(JSON.stringify({ error: msg }), {
         status: 502,
         headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });

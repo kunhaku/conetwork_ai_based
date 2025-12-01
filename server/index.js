@@ -5,8 +5,9 @@ const app = express();
 const PORT = process.env.PORT || 8787;
 const PUTER_URL = process.env.PUTER_API_URL || 'https://api.puter.com/v2/openai/chat/completions';
 const OPENAI_KEY = process.env.OPENAI_API_KEY || '';
+const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
 const DEBUG = process.env.DEBUG_LOG === '1';
-const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 15000);
+const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 30000);
 
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
@@ -57,7 +58,8 @@ async function callOpenAI(body) {
   if (!OPENAI_KEY) throw new Error('OPENAI_API_KEY not set');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const base = OPENAI_BASE_URL.replace(/\/+$/, '');
+  const response = await fetch(`${base}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -119,7 +121,7 @@ app.post('/api/run', async (req, res) => {
     console.error('Server error', e);
     const msg = e?.message?.includes('puter_api_error') ? 'Puter API error: ' + e.message
               : e?.message?.includes('openai_api_error') ? 'OpenAI API error: ' + e.message
-              : e?.name === 'AbortError' ? 'Request timed out'
+              : e?.name === 'AbortError' ? `Request timed out after ${REQUEST_TIMEOUT_MS}ms (check PUTER_API_URL or OpenAI reachability)`
               : e?.message || 'Server error';
     return res.status(500).json({ error: msg });
   }
