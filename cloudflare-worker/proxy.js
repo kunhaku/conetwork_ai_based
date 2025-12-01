@@ -89,7 +89,8 @@ export default {
       // fallback to OpenAI if configured
       if (env.OPENAI_API_KEY) {
         try {
-          const oaiResp = await fetch('https://api.openai.com/v1/chat/completions', {
+          const base = env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
+          const oaiResp = await fetch(`${base.replace(/\/+$/, '')}/chat/completions`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

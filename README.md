@@ -29,6 +29,7 @@ Notes:
     - `PUTER_API_URL` (optional): defaults to `https://api.puter.com/v2/openai/chat/completions`.
     - `OPENAI_API_KEY` (optional): fallback if Puter is blocked.
     - `OPENAI_MODEL` (optional): default `gpt-4o-mini`.
+    - `OPENAI_BASE_URL` (optional): override OpenAI endpoint (e.g., a compatible gateway URL).
     - `REQUEST_TIMEOUT_MS` (optional): default `15000`.
   - Routes: map `/api/run` and `/api/ping` to this Worker (e.g., `https://yourdomain.com/api/*`).
   - From frontend, set `VITE_API_BASE` to your Worker endpoint (e.g., `https://yourdomain.com/api/run`) or keep default `/api/run` if behind same domain proxy.
