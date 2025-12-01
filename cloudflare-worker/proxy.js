@@ -59,7 +59,53 @@ export default {
     const timeoutMs = Number(env.REQUEST_TIMEOUT_MS || 15000);
     const abort = AbortSignal.timeout(timeoutMs);
 
-    // Try Puter first
+    // If OPENAI_API_KEY is present, use OpenAI directly and skip Puter
+    if (env.OPENAI_API_KEY) {
+      try {
+        const base = env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
+        const oaiResp = await fetch(`${base.replace(/\/+$/, '')}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: env.OPENAI_MODEL || 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: systemInstruction },
+              { role: 'user', content: userContent },
+            ],
+            temperature,
+            response_format: { type: 'json_object' },
+          }),
+          signal: abort,
+        });
+        const oaiText = await oaiResp.text();
+        if (!oaiResp.ok) {
+          return new Response(JSON.stringify({ error: `openai ${oaiResp.status}: ${oaiText}` }), {
+            status: 502,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+        let parsed;
+        try { parsed = JSON.parse(oaiText); } catch (_) {}
+        const content =
+          parsed?.choices?.[0]?.message?.content ??
+          parsed?.message?.content ??
+          parsed?.content ??
+          oaiText;
+        return new Response(JSON.stringify({ content, raw: parsed ?? oaiText }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      } catch (fallbackErr) {
+        return new Response(JSON.stringify({ error: fallbackErr.message || 'openai_error' }), {
+          status: 502,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      }
+    }
+
+    // Otherwise, try Puter
     try {
       const puterResp = await fetch(env.PUTER_API_URL || 'https://api.puter.com/v2/openai/chat/completions', {
         method: 'POST',
@@ -86,52 +132,6 @@ export default {
         headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     } catch (err) {
-      // fallback to OpenAI if configured
-      if (env.OPENAI_API_KEY) {
-        try {
-          const base = env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
-          const oaiResp = await fetch(`${base.replace(/\/+$/, '')}/chat/completions`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
-            },
-            body: JSON.stringify({
-              model: env.OPENAI_MODEL || 'gpt-4o-mini',
-              messages: [
-                { role: 'system', content: systemInstruction },
-                { role: 'user', content: userContent },
-              ],
-              temperature,
-              response_format: { type: 'json_object' },
-            }),
-            signal: abort,
-          });
-          const oaiText = await oaiResp.text();
-          if (!oaiResp.ok) {
-          return new Response(JSON.stringify({ error: `openai ${oaiResp.status}: ${oaiText}` }), {
-            status: 502,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          });
-        }
-          let parsed;
-          try { parsed = JSON.parse(oaiText); } catch (_) {}
-          const content =
-            parsed?.choices?.[0]?.message?.content ??
-            parsed?.message?.content ??
-            parsed?.content ??
-            oaiText;
-          return new Response(JSON.stringify({ content, raw: parsed ?? oaiText }), {
-            headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          });
-        } catch (fallbackErr) {
-          return new Response(JSON.stringify({ error: fallbackErr.message || 'openai_fallback_error' }), {
-            status: 502,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          });
-        }
-      }
-
       return new Response(JSON.stringify({ error: err.message || 'puter_error' }), {
         status: 502,
         headers: { 'Content-Type': 'application/json', ...corsHeaders },
