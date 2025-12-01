@@ -11,6 +11,7 @@ import {
 
 type ChatOptions = { temperature?: number; model?: string };
 const API_BASE = import.meta.env.VITE_API_BASE || '/api/run';
+const PROXY_TOKEN = import.meta.env.VITE_PROXY_TOKEN || '';
 
 // Helper to parse JSON from Markdown code blocks or raw text
 const safeParseJSON = (text: string) => {
@@ -37,9 +38,14 @@ const callPuterChat = async (
 ): Promise<string> => {
   const endpoint = API_BASE;
   console.info('[api/run] calling backend', { model: options.model || 'gpt-5.1', endpoint });
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (PROXY_TOKEN) {
+    headers['Authorization'] = `Bearer ${PROXY_TOKEN}`;
+  }
+
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
       model: options.model || 'gpt-5.1',
       systemInstruction,
