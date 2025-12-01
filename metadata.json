@@ -1,0 +1,5 @@
+{
+  "name": "NexusGraph AI",
+  "description": "An AI-powered automated corporate relationship knowledge graph generator using Puter GPT-5.1 and D3.",
+  "requestFramePermissions": []
+}
