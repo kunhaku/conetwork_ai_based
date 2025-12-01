@@ -1,16 +1,25 @@
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+    };
+
+    if (req.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: corsHeaders });
+    }
 
     // Health check
     if (url.pathname === '/api/ping') {
       return new Response(JSON.stringify({ ok: true, message: 'cf worker ok' }), {
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
 
     if (url.pathname !== '/api/run') {
-      return new Response('Not found', { status: 404 });
+      return new Response('Not found', { status: 404, headers: corsHeaders });
     }
 
     // Basic token check (optional but recommended)
@@ -18,7 +27,7 @@ export default {
     if (env.PROXY_TOKEN && !auth.includes(env.PROXY_TOKEN)) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
 
@@ -26,14 +35,14 @@ export default {
     try {
       input = await req.json();
     } catch (_) {
-      return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 });
+      return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: corsHeaders });
     }
 
     const { model = 'gpt-5.1', systemInstruction, userContent, temperature = 0.1 } = input || {};
     if (!systemInstruction || !userContent) {
       return new Response(JSON.stringify({ error: 'Missing systemInstruction or userContent' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
 
@@ -74,7 +83,7 @@ export default {
         puterText;
 
       return new Response(JSON.stringify({ content, raw: parsed ?? puterText }), {
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     } catch (err) {
       // fallback to OpenAI if configured
@@ -99,11 +108,11 @@ export default {
           });
           const oaiText = await oaiResp.text();
           if (!oaiResp.ok) {
-            return new Response(JSON.stringify({ error: `openai ${oaiResp.status}: ${oaiText}` }), {
-              status: 502,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
+          return new Response(JSON.stringify({ error: `openai ${oaiResp.status}: ${oaiText}` }), {
+            status: 502,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
           let parsed;
           try { parsed = JSON.parse(oaiText); } catch (_) {}
           const content =
@@ -112,19 +121,19 @@ export default {
             parsed?.content ??
             oaiText;
           return new Response(JSON.stringify({ content, raw: parsed ?? oaiText }), {
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
           });
         } catch (fallbackErr) {
           return new Response(JSON.stringify({ error: fallbackErr.message || 'openai_fallback_error' }), {
             status: 502,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
           });
         }
       }
 
       return new Response(JSON.stringify({ error: err.message || 'puter_error' }), {
         status: 502,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
   }
