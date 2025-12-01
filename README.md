@@ -33,4 +33,5 @@ Notes:
     - `REQUEST_TIMEOUT_MS` (optional): default `15000`.
   - Routes: map `/api/run` and `/api/ping` to this Worker (e.g., `https://yourdomain.com/api/*`).
   - From frontend, set `VITE_API_BASE` to your Worker endpoint (e.g., `https://yourdomain.com/api/run`) or keep default `/api/run` if behind same domain proxy.
+  - If you set `PROXY_TOKEN` on the Worker, mirror it in `.env.local` as `VITE_PROXY_TOKEN` so requests include the Authorization header.
 - To verify API server connectivity (proxy mode), hit `GET /api/ping` locally: `curl http://localhost:8787/api/ping`.

@@ -9,6 +9,10 @@ import { runPipeline } from './services/geminiService';
 
 type ViewMode = 'graph' | 'report';
 
+const API_BASE = import.meta.env.VITE_API_BASE || '/api/run';
+const PROXY_TOKEN = import.meta.env.VITE_PROXY_TOKEN || '';
+const pingUrl = API_BASE.endsWith('/run') ? API_BASE.replace(/\/run$/, '/ping') : `${API_BASE}/ping`;
+
 const App: React.FC = () => {
   const [graphData, setGraphData] = useState<UnifiedGraph | null>(null);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
@@ -21,7 +25,9 @@ const App: React.FC = () => {
     // Quick connectivity check
     try {
       setStatus({ stage: 'agent-s', message: 'Pinging API server...', progress: 2 });
-      const ping = await fetch('/api/ping');
+      const headers: Record<string, string> = {};
+      if (PROXY_TOKEN) headers['Authorization'] = `Bearer ${PROXY_TOKEN}`;
+      const ping = await fetch(pingUrl, { headers });
       if (!ping.ok) {
         throw new Error(`API server ping failed (${ping.status})`);
       }
