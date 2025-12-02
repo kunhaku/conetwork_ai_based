@@ -3,12 +3,8 @@ main = "cloudflare-worker/proxy.js"
 compatibility_date = "2025-12-01"
 
 [vars]
-VITE_FINANCE_API = "https://your-worker.workers.dev/api/finance/quote"  # 若前端在 Pages，也可放那邊
+VITE_FINANCE_API = "https://conetwork.klozti-com.workers.dev/api/finance/quote"
 FINNHUB_ENV = "prod"
-VITE_LLM_MODEL=gemini-2.5-flash-lite   
-VITE_LLM_PROVIDER=gemini
-SUPABASE_URL=https://pakkevrgjsbujsvvkgtw.supabase.co
-wrangler secret put FINNHUB_API_KEY
-wrangler secret put GEMINI_API_KEY   
-wrangler secret put SUPABASE_SERVICE_ROLE_KEY
-wrangler secret put ALPHA_VANTAGE_KEY
+VITE_LLM_MODEL = "gemini-2.5-flash-lite"
+VITE_LLM_PROVIDER = "gemini"
+SUPABASE_URL = "https://pakkevrgjsbujsvvkgtw.supabase.co"
