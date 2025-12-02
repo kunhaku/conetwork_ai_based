@@ -26,8 +26,8 @@ const sizeBucketFromCap = (cap) => {
 };
 
 async function handleFinanceQuote(req, env) {
-  if (!env.ALPHA_VANTAGE_KEY) {
-    return new Response(JSON.stringify({ error: 'ALPHA_VANTAGE_KEY not configured' }), {
+  if (!env.FINNHUB_API_KEY) {
+    return new Response(JSON.stringify({ error: 'FINNHUB_API_KEY not configured' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json', ...corsHeaders },
     });
@@ -54,41 +54,42 @@ async function handleFinanceQuote(req, env) {
       }
 
       const qResp = await fetch(
-        `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(env.ALPHA_VANTAGE_KEY)}`
+        `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${encodeURIComponent(env.FINNHUB_API_KEY)}`
       );
-      const qJson = await qResp.json();
-      if (qJson?.Note || qJson?.Information) {
-        updates[name] = { note: qJson.Note || qJson.Information };
+      const quote = await qResp.json();
+      if (quote?.error || quote?.errorMessage) {
+        updates[name] = { note: quote.error || quote.errorMessage };
         continue;
       }
-      const quote = qJson?.['Global Quote'];
-      if (!quote || Object.keys(quote).length === 0) {
+      if (!quote || typeof quote !== 'object' || (quote.c === 0 && quote.pc === 0)) {
         updates[name] = { note: 'ticker_not_found' };
         continue;
       }
 
-      const oResp = await fetch(
-        `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(env.ALPHA_VANTAGE_KEY)}`
+      const profileResp = await fetch(
+        `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(symbol)}&token=${encodeURIComponent(env.FINNHUB_API_KEY)}`
       );
-      const oJson = await oResp.json();
-      if (oJson?.Note || oJson?.Information) {
-        updates[name] = { note: oJson.Note || oJson.Information };
+      const profile = await profileResp.json();
+      if (profile?.error || profile?.errorMessage) {
+        updates[name] = { note: profile.error || profile.errorMessage };
         continue;
       }
 
-      const ticker = quote['01. symbol'] || symbol;
-      const currency = oJson?.Currency || 'USD';
-      const latestPriceRaw = quote['05. price'] ?? quote['02. open'];
-      const capRaw = oJson?.MarketCapitalization;
+      const ticker = profile?.ticker || profile?.symbol || symbol;
+      const currency = profile?.currency || 'USD';
+      const latestPriceRaw = quote?.c ?? quote?.pc;
+      const capRaw = profile?.marketCapitalization
+        ? Number(profile.marketCapitalization) * 1e6 // Finnhub returns in millions
+        : undefined;
 
       updates[name] = {
         ticker,
-        primaryExchange: oJson?.Exchange || undefined,
+        primaryExchange: profile?.exchange || profile?.market || undefined,
         latestPrice: formatMoney(latestPriceRaw, currency),
         marketCap: formatMoney(capRaw, currency),
-        sector: oJson?.Sector,
-        industry: oJson?.Industry,
-        country: oJson?.Country,
+        sector: profile?.finnhubIndustry || profile?.sector,
+        industry: profile?.industry,
+        country: profile?.country,
         sizeBucket: sizeBucketFromCap(capRaw),
       };
     } catch (e) {
