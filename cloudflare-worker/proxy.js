@@ -1,3 +1,5 @@
+import { createClient } from '@supabase/supabase-js';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
@@ -23,6 +25,39 @@ const sizeBucketFromCap = (cap) => {
   if (v >= 2e9) return 'Mid';
   if (v >= 300e6) return 'Small';
   return 'Micro';
+};
+
+const normalizeName = (name = '') =>
+  name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gi, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+
+const relationTypeMap = {
+  SupplyChain: 'supply_chain',
+  Equity: 'equity',
+  Competitor: 'competitor',
+  Partner: 'partner',
+  Acquisition: 'acquisition',
+  Customer: 'customer',
+};
+const toRelationType = (type = '') => relationTypeMap[type] || type?.toString().toLowerCase();
+
+const evidenceToConfidence = (strength) => {
+  if (!strength) return 0.6;
+  const s = strength.toString().toLowerCase();
+  if (s === 'confirmed') return 0.9;
+  if (s === 'speculative') return 0.5;
+  return 0.6;
+};
+
+const extractDomain = (url) => {
+  try {
+    return new URL(url).hostname;
+  } catch (_) {
+    return null;
+  }
 };
 
 const aliasTickers = {
@@ -74,22 +109,205 @@ async function resolveSymbol(name, env, cache) {
   }
 }
 
+const jsonResponse = (obj, status = 200) =>
+  new Response(JSON.stringify(obj), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...corsHeaders },
+  });
+
+const getSupabase = (env) => {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error('Supabase env missing');
+  }
+  return createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+    global: { fetch: (url, opts) => fetch(url, opts) },
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+};
+
+async function ensureSources(supabase, sources = []) {
+  const sourceIdMap = {};
+  for (const src of sources) {
+    if (!src?.url) continue;
+    const url = src.url;
+    const domain = extractDomain(url);
+    const { data, error } = await supabase
+      .from('sources')
+      .upsert(
+        {
+          url,
+          domain,
+          metadata: { title: src.title, note: src.note },
+        },
+        { onConflict: 'url' }
+      )
+      .select('id')
+      .maybeSingle();
+    if (error) throw error;
+    if (data?.id) sourceIdMap[src.id ?? url] = data.id;
+  }
+  return sourceIdMap;
+}
+
+async function ensureNodes(supabase, nodes = []) {
+  const nodeIdMap = {};
+  for (const node of nodes) {
+    if (!node?.name) continue;
+    const canonical = node.name.trim();
+    const norm = normalizeName(canonical);
+    const type = node.type || 'company';
+    const ext = node.ticker ? { ticker: node.ticker } : {};
+    const importance = node.role === 'Core' ? 5 : 1;
+    const { data, error } = await supabase
+      .from('nodes')
+      .upsert(
+        {
+          type,
+          canonical_name: canonical,
+          normalized_name: norm,
+          external_ids: ext,
+          importance_score: importance,
+        },
+        { onConflict: 'type,normalized_name' }
+      )
+      .select('id')
+      .maybeSingle();
+    if (error) throw error;
+    if (data?.id) nodeIdMap[node.id ?? canonical] = data.id;
+  }
+  return nodeIdMap;
+}
+
+async function ensureAliases(supabase, nodeIdMap, nodes = []) {
+  for (const node of nodes) {
+    if (!node?.name) continue;
+    const dbId = nodeIdMap[node.id ?? node.name];
+    if (!dbId) continue;
+    const aliases = [node.name, node.displayName].filter(Boolean);
+    for (const alias of aliases) {
+      const { error } = await supabase
+        .from('node_aliases')
+        .upsert(
+          { node_id: dbId, alias },
+          { onConflict: 'node_id,alias' }
+        );
+      if (error) throw error;
+    }
+  }
+}
+
+async function upsertFacts(supabase, nodeIdMap, nodes = [], sourceIdMap = {}) {
+  for (const node of nodes) {
+    const dbId = nodeIdMap[node.id ?? node.name];
+    if (!dbId) continue;
+    const facts = [];
+    const pushText = (attribute, value) => {
+      if (value) facts.push({ attribute, value_text: value });
+    };
+    pushText('role', node.role);
+    pushText('country', node.country);
+    pushText('ticker', node.ticker);
+    pushText('primary_exchange', node.primaryExchange);
+    pushText('sector', node.sector);
+    pushText('industry', node.industry);
+    pushText('size_bucket', node.sizeBucket);
+    pushText('growth_profile', node.growthProfile);
+    pushText('latest_price', node.latestPrice);
+    pushText('market_cap', node.marketCap);
+    pushText('revenue', node.revenue);
+    pushText('net_income', node.netIncome);
+    pushText('note', node.note);
+    if (node.riskNotes) facts.push({ attribute: 'risk_notes', value_text: node.riskNotes });
+    if (Array.isArray(node.keyThemes) && node.keyThemes.length > 0) {
+      facts.push({ attribute: 'key_themes', value_json: { items: node.keyThemes } });
+    }
+
+    for (const fact of facts) {
+      const base = {
+        node_id: dbId,
+        attribute: fact.attribute,
+        value_text: fact.value_text ?? null,
+        value_numeric: fact.value_numeric ?? null,
+        value_json: fact.value_json ?? null,
+        confidence_score: 0.6,
+        source_id: fact.source_id ? sourceIdMap[fact.source_id] : null,
+      };
+      const { data: existing, error: selErr } = await supabase
+        .from('facts')
+        .select('id')
+        .eq('node_id', dbId)
+        .eq('attribute', base.attribute)
+        .eq('value_text', base.value_text)
+        .eq('value_numeric', base.value_numeric)
+        .eq('value_json', base.value_json)
+        .maybeSingle();
+      if (selErr) throw selErr;
+      if (existing?.id) continue;
+      const { error } = await supabase.from('facts').insert(base);
+      if (error) throw error;
+    }
+  }
+}
+
+async function upsertEdges(supabase, links = [], nodeIdMap = {}, sourceIdMap = {}) {
+  for (const link of links) {
+    const srcId = nodeIdMap[typeof link.source === 'string' ? link.source : link.source?.id];
+    const dstId = nodeIdMap[typeof link.target === 'string' ? link.target : link.target?.id];
+    if (!srcId || !dstId) continue;
+    const relation_type = toRelationType(link.type);
+    const confidence_score = evidenceToConfidence(link.evidenceStrength);
+    const { data: existing, error: selErr } = await supabase
+      .from('edges')
+      .select('id')
+      .eq('src_node_id', srcId)
+      .eq('dst_node_id', dstId)
+      .eq('relation_type', relation_type)
+      .is('valid_from', null)
+      .maybeSingle();
+    if (selErr) throw selErr;
+    let edgeId = existing?.id;
+    if (!edgeId) {
+      const { data, error: insErr } = await supabase
+        .from('edges')
+        .insert({
+          src_node_id: srcId,
+          dst_node_id: dstId,
+          relation_type,
+          confidence_score,
+          valid_from: null,
+          valid_to: null,
+        })
+        .select('id')
+        .maybeSingle();
+      if (insErr) throw insErr;
+      edgeId = data?.id;
+    }
+    if (edgeId && Array.isArray(link.sourceIds) && link.sourceIds.length > 0) {
+      for (const srcRef of link.sourceIds) {
+        const sid = sourceIdMap[srcRef];
+        if (!sid) continue;
+        const { error } = await supabase
+          .from('edge_sources')
+          .upsert(
+            { edge_id: edgeId, source_id: sid },
+            { onConflict: 'edge_id,source_id' }
+          );
+        if (error) throw error;
+      }
+    }
+  }
+}
+
 async function handleFinanceQuote(req, env) {
   if (!env.FINNHUB_API_KEY) {
-    return new Response(JSON.stringify({ error: 'FINNHUB_API_KEY not configured' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
+    return jsonResponse({ error: 'FINNHUB_API_KEY not configured' }, 500);
   }
 
   let body;
   try { body = await req.json(); } catch (_) {}
   const names = body?.names;
   if (!Array.isArray(names) || names.length === 0) {
-    return new Response(JSON.stringify({ error: 'names must be a non-empty array' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
+    return jsonResponse({ error: 'names must be a non-empty array' }, 400);
   }
 
   const updates = {};
@@ -153,6 +371,55 @@ async function handleFinanceQuote(req, env) {
   });
 }
 
+async function handleDbPing(env) {
+  try {
+    const supabase = getSupabase(env);
+    const { error } = await supabase.from('nodes').select('id').limit(1);
+    if (error) throw error;
+    return jsonResponse({ ok: true });
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e?.message || 'db_error' }, 500);
+  }
+}
+
+async function handleGraphUpsert(req, env) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+    return jsonResponse({ error: 'Supabase env missing' }, 500);
+  }
+  const auth = req.headers.get('authorization') || '';
+  if (env.PROXY_TOKEN && !auth.includes(env.PROXY_TOKEN)) {
+    return jsonResponse({ error: 'Unauthorized' }, 401);
+  }
+  let graph;
+  try {
+    const body = await req.json();
+    graph = body?.graph || body;
+  } catch (_) {
+    return jsonResponse({ error: 'Invalid JSON' }, 400);
+  }
+  if (!graph || !graph.nodes) {
+    return jsonResponse({ error: 'Graph payload missing' }, 400);
+  }
+  const supabase = getSupabase(env);
+  try {
+    const sourceIdMap = await ensureSources(supabase, graph.sources || []);
+    const nodeIdMap = await ensureNodes(supabase, graph.nodes || []);
+    await ensureAliases(supabase, nodeIdMap, graph.nodes || []);
+    await upsertFacts(supabase, nodeIdMap, graph.nodes || [], sourceIdMap);
+    await upsertEdges(supabase, graph.links || [], nodeIdMap, sourceIdMap);
+    return jsonResponse({
+      ok: true,
+      counts: {
+        sources: Object.keys(sourceIdMap).length,
+        nodes: Object.keys(nodeIdMap).length,
+        links: Array.isArray(graph.links) ? graph.links.length : 0,
+      },
+    });
+  } catch (e) {
+    return jsonResponse({ error: e?.message || 'db_error' }, 500);
+  }
+}
+
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
@@ -170,19 +437,25 @@ export default {
         : usingGemini
           ? env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta'
           : env.PUTER_API_URL || 'https://api.puter.com/v2/openai/chat/completions';
-      return new Response(JSON.stringify({ 
-        ok: true, 
+      return jsonResponse({
+        ok: true,
         message: 'cf worker ok',
         provider: usingOpenAI ? 'openai' : usingGemini ? 'gemini' : 'puter',
         baseUrl: base,
         timeoutMs: Number(env.REQUEST_TIMEOUT_MS || 30000),
-      }), {
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
+    }
+
+    if (url.pathname === '/api/db/ping') {
+      return handleDbPing(env);
     }
 
     if (url.pathname === '/api/finance/quote') {
       return handleFinanceQuote(req, env);
+    }
+
+    if (url.pathname === '/api/db/graph/upsert') {
+      return handleGraphUpsert(req, env);
     }
 
     if (url.pathname !== '/api/run') {
