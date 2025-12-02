@@ -12,6 +12,7 @@ import { callLLM } from "./llmClient";
 
 type ChatOptions = { temperature?: number; model?: string };
 const FINANCE_API = import.meta.env.VITE_FINANCE_API || '/api/finance/quote';
+const DB_API = import.meta.env.VITE_DB_API || '/api/db/graph/upsert';
 
 // Helper to parse JSON from Markdown code blocks or raw text
 const safeParseJSON = (text: string) => {
@@ -399,6 +400,17 @@ export const runPipeline = async (
   if (report) {
     consolidatedGraph.report = report;
     consolidatedGraph.summary = report.themeOverview;
+  }
+
+  // Persist the full graph (nodes, links, sources, summary/report) to the DB API
+  try {
+    await fetch(DB_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ graph: consolidatedGraph }),
+    });
+  } catch (e) {
+    console.error('Persist graph failed', e);
   }
 
   onStatus({ stage: 'complete', message: 'Pipeline Complete.', progress: 100 });
