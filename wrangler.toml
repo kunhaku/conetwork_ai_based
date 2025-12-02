@@ -1,0 +1,3 @@
+name = "conetwork"
+main = "cloudflare-worker/proxy.js"
+compatibility_date = "2025-12-01"
