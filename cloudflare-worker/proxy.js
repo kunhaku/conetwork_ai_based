@@ -25,6 +25,55 @@ const sizeBucketFromCap = (cap) => {
   return 'Micro';
 };
 
+const aliasTickers = {
+  'intel': 'INTC',
+  'tsmc': 'TSM',
+  'taiwan semiconductor': 'TSM',
+  'apple': 'AAPL',
+  'microsoft': 'MSFT',
+  'google': 'GOOGL',
+  'alphabet': 'GOOGL',
+  'amazon': 'AMZN',
+  'meta': 'META',
+  'facebook': 'META',
+  'nvidia': 'NVDA',
+};
+
+const cleanSymbol = (sym) => {
+  if (!sym) return sym;
+  if (sym.endsWith('.US')) return sym.slice(0, -3);
+  return sym;
+};
+
+const pickBestSymbol = (results = []) => {
+  const firstMatch = results.find((r) => r?.symbol);
+  const isUs = (s) => s && (s.endsWith('.US') || s.endsWith('.O') || s.endsWith('.N'));
+  const filtered = results.filter((r) => r?.symbol && r.type === 'Common Stock');
+  const usMatch = filtered.find((r) => isUs(r.symbol)) || filtered.find((r) => !r.symbol.includes('.'));
+  return cleanSymbol((usMatch || filtered[0] || firstMatch || {}).symbol);
+};
+
+async function resolveSymbol(name, env, cache) {
+  const key = String(name || '').trim();
+  if (!key) return null;
+  const lower = key.toLowerCase();
+
+  if (aliasTickers[lower]) return aliasTickers[lower];
+  if (cache[lower]) return cache[lower];
+
+  try {
+    const resp = await fetch(
+      `https://finnhub.io/api/v1/search?q=${encodeURIComponent(key)}&token=${encodeURIComponent(env.FINNHUB_API_KEY)}`
+    );
+    const json = await resp.json();
+    const symbol = pickBestSymbol(json?.result || []);
+    if (symbol) cache[lower] = symbol;
+    return symbol;
+  } catch (_) {
+    return null;
+  }
+}
+
 async function handleFinanceQuote(req, env) {
   if (!env.FINNHUB_API_KEY) {
     return new Response(JSON.stringify({ error: 'FINNHUB_API_KEY not configured' }), {
@@ -44,10 +93,11 @@ async function handleFinanceQuote(req, env) {
   }
 
   const updates = {};
+  const searchCache = {};
 
   for (const name of names) {
     try {
-      const symbol = String(name || '').trim();
+      const symbol = await resolveSymbol(name, env, searchCache);
       if (!symbol) {
         updates[name] = { note: 'ticker_not_found' };
         continue;
