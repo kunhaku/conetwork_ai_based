@@ -376,9 +376,9 @@ async function handleDbPing(env) {
     const supabase = getSupabase(env);
     const { error } = await supabase.from('nodes').select('id').limit(1);
     if (error) throw error;
-    return jsonResponse({ ok: true });
+    return jsonResponse({ ok: true, usingServiceRole: Boolean(env.SUPABASE_SERVICE_ROLE_KEY) });
   } catch (e) {
-    return jsonResponse({ ok: false, error: e?.message || 'db_error' }, 500);
+    return jsonResponse({ ok: false, error: e?.message || 'db_error', usingServiceRole: Boolean(env.SUPABASE_SERVICE_ROLE_KEY) }, 500);
   }
 }
 
@@ -443,6 +443,7 @@ export default {
         provider: usingOpenAI ? 'openai' : usingGemini ? 'gemini' : 'puter',
         baseUrl: base,
         timeoutMs: Number(env.REQUEST_TIMEOUT_MS || 30000),
+        usingServiceRole: Boolean(env.SUPABASE_SERVICE_ROLE_KEY),
       });
     }
 
