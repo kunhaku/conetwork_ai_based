@@ -11,6 +11,7 @@ import {
 import { callLLM } from "./llmClient";
 
 type ChatOptions = { temperature?: number; model?: string };
+const FINANCE_API = import.meta.env.VITE_FINANCE_API || '/api/finance/quote';
 
 // Helper to parse JSON from Markdown code blocks or raw text
 const safeParseJSON = (text: string) => {
@@ -90,35 +91,38 @@ const runAgentS = async (seed: string, topic: string): Promise<UnifiedGraph | nu
   }
 };
 
-// --- STAGE 1.5: AGENT Q (Quantitative Data Fetcher - Virtual yfinance) ---
+// --- STAGE 1.5: AGENT Q (Quantitative Data via yfinance) ---
 const runAgentQ = async (nodes: GraphNode[]): Promise<Record<string, Partial<GraphNode>>> => {
-    // Optimization: Run on nodes that don't have ticker/marketCap
-    const BATCH_SIZE = 15; 
-    let allUpdates: Record<string, Partial<GraphNode>> = {};
+  const BATCH_SIZE = 15;
+  let allUpdates: Record<string, Partial<GraphNode>> = {};
 
-    const chunks = [];
-    for (let i = 0; i < nodes.length; i += BATCH_SIZE) {
-        chunks.push(nodes.slice(i, i + BATCH_SIZE));
+  const chunks: GraphNode[][] = [];
+  for (let i = 0; i < nodes.length; i += BATCH_SIZE) {
+    chunks.push(nodes.slice(i, i + BATCH_SIZE));
+  }
+
+  for (const chunk of chunks) {
+    const names = chunk.map((n) => n.name);
+    try {
+      const resp = await fetch(FINANCE_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ names }),
+      });
+      if (!resp.ok) {
+        console.error('Agent Q finance API failed', resp.status, await resp.text());
+        continue;
+      }
+      const data = await resp.json();
+      if (data?.updates) {
+        allUpdates = { ...allUpdates, ...data.updates };
+      }
+    } catch (e) {
+      console.error("Agent Q batch failed", e);
     }
+  }
 
-    for (const chunk of chunks) {
-        const names = chunk.map(n => n.name);
-        try {
-            const response = await callPuterChat(
-              AGENT_Q_SYSTEM_INSTRUCTION,
-              JSON.stringify(names),
-              { temperature: 0.1 }
-            );
-
-            const result = safeParseJSON(response || "");
-            if (result && result.updates) {
-                allUpdates = { ...allUpdates, ...result.updates };
-            }
-        } catch (e) {
-            console.error("Agent Q batch failed", e);
-        }
-    }
-    return allUpdates;
+  return allUpdates;
 };
 
 

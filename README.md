@@ -47,3 +47,19 @@ If you want to use https://github.com/popjane/free_chatgpt_api (base `https://fr
 - `OPENAI_MODEL`: e.g., `gpt-4o-mini` (supported by the free endpoint).
 
 With `OPENAI_API_KEY` set, the proxy skips Puter entirely and speaks OpenAI-compatible JSON to the free endpoint.
+
+## Supabase (graph memory) quickstart
+
+1) Run `server/schema.sql` in Supabase SQL editor to create the core tables.  
+2) Set server env vars: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (writes), optional `PORT`.  
+3) Service API routes (require service role; do not expose directly to the browser):
+- `GET /api/db/ping` – connectivity check.
+- `GET /api/db/search?q=TSMC` – fuzzy search nodes.
+- `GET /api/db/node/:id/profile` – node, aliases, edges, facts.
+- `POST /api/db/graph/upsert` – persist `{ nodes, links, sources }` from agents.
+- `POST /api/crawl/enqueue` – add crawl job; `GET /api/crawl/next?limit=10`; `POST /api/crawl/complete`.
+
+Minimal orchestrator loop:
+- Agents produce `graph` → `POST /api/db/graph/upsert`.
+- When a node is missing/stale, enqueue a crawl task → `/api/crawl/enqueue`.
+- Worker consumes `/api/crawl/next` → fetch/LLM extract → upsert graph → `/api/crawl/complete`.
