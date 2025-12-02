@@ -16,6 +16,7 @@ View your app in AI Studio: https://ai.studio/apps/drive/15PQTTsLJ5uKINCsDXT9l-_
 1. Install dependencies:
    `npm install`
 2. (Optional) Create `.env.local` for frontend (currently no required vars).
+   - If your Worker is using Gemini, set `VITE_LLM_PROVIDER=gemini` and `VITE_LLM_MODEL=gemini-2.5-flash-lite` to update the UI label.
 3. Start the frontend:
    `npm run dev`
 
@@ -30,6 +31,9 @@ Notes:
     - `OPENAI_API_KEY` (optional): fallback if Puter is blocked. Set this to force skipping Puter entirely.
     - `OPENAI_MODEL` (optional): default `gpt-4o-mini`.
     - `OPENAI_BASE_URL` (optional): override OpenAI endpoint (e.g., a compatible gateway URL).
+    - `GEMINI_API_KEY` (optional): if set (and OpenAI not set), worker will call Gemini `generateContent` instead of Puter.
+    - `GEMINI_MODEL` (optional): default `gemini-2.5-flash-lite`.
+    - `GEMINI_BASE_URL` (optional): default `https://generativelanguage.googleapis.com/v1beta`.
     - `REQUEST_TIMEOUT_MS` (optional): default `30000`.
   - Routes: map `/api/run` and `/api/ping` to this Worker (e.g., `https://yourdomain.com/api/*`).
   - From frontend, set `VITE_API_BASE` to your Worker endpoint (e.g., `https://yourdomain.com/api/run`) or keep default `/api/run` if behind same domain proxy.

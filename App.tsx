@@ -12,7 +12,15 @@ type ViewMode = 'graph' | 'report';
 const API_BASE = import.meta.env.VITE_API_BASE || '/api/run';
 const PROXY_TOKEN = import.meta.env.VITE_PROXY_TOKEN || '';
 const pingUrl = API_BASE.endsWith('/run') ? API_BASE.replace(/\/run$/, '/ping') : `${API_BASE}/ping`;
-const LLM_LABEL = import.meta.env.VITE_LLM_MODEL ? `OpenAI (${import.meta.env.VITE_LLM_MODEL})` : 'OpenAI (default gpt-4o-mini)';
+const LLM_PROVIDER = (import.meta.env.VITE_LLM_PROVIDER as string) || 'worker';
+const LLM_MODEL = import.meta.env.VITE_LLM_MODEL as string | undefined;
+const LLM_LABEL = (() => {
+  const modelPart = LLM_MODEL ? ` (${LLM_MODEL})` : '';
+  if (LLM_PROVIDER === 'gemini') return `Gemini${modelPart || ' (default gemini-2.5-flash-lite)'}`;
+  if (LLM_PROVIDER === 'puter') return `Puter${modelPart || ' (default gpt-4o-mini)'}`;
+  if (LLM_PROVIDER === 'worker') return `Worker proxy${modelPart || ''}`;
+  return `OpenAI${modelPart || ' (default gpt-4o-mini)'}`;
+})();
 
 const App: React.FC = () => {
   const [graphData, setGraphData] = useState<UnifiedGraph | null>(null);

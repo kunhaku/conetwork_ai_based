@@ -13,7 +13,20 @@ export default {
 
     // Health check
     if (url.pathname === '/api/ping') {
-      return new Response(JSON.stringify({ ok: true, message: 'cf worker ok' }), {
+      const usingOpenAI = Boolean(env.OPENAI_API_KEY);
+      const usingGemini = !usingOpenAI && Boolean(env.GEMINI_API_KEY);
+      const base = usingOpenAI
+        ? env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
+        : usingGemini
+          ? env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta'
+          : env.PUTER_API_URL || 'https://api.puter.com/v2/openai/chat/completions';
+      return new Response(JSON.stringify({ 
+        ok: true, 
+        message: 'cf worker ok',
+        provider: usingOpenAI ? 'openai' : usingGemini ? 'gemini' : 'puter',
+        baseUrl: base,
+        timeoutMs: Number(env.REQUEST_TIMEOUT_MS || 30000),
+      }), {
         headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
@@ -101,6 +114,56 @@ export default {
         const msg = (fallbackErr?.name === 'TimeoutError' || `${fallbackErr?.message || ''}`.toLowerCase().includes('timeout'))
           ? `openai upstream timeout after ${timeoutMs}ms`
           : fallbackErr?.message || 'openai_error';
+        return new Response(JSON.stringify({ error: msg }), {
+          status: 502,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      }
+    }
+
+    // If GEMINI_API_KEY is present (and OpenAI is not), use Gemini
+    if (env.GEMINI_API_KEY) {
+      try {
+        const base = (env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/+$/, '');
+        const modelName = env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
+        const gemResp = await fetch(`${base}/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': 'nexusgraph-cf-proxy',
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { text: `${systemInstruction}\n\nUser:\n${userContent}` }
+                ]
+              }
+            ],
+            generationConfig: { temperature }
+          }),
+          signal: abort,
+        });
+        const gemText = await gemResp.text();
+        if (!gemResp.ok) {
+          return new Response(JSON.stringify({ error: `gemini ${gemResp.status}: ${gemText}` }), {
+            status: 502,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+        let parsed;
+        try { parsed = JSON.parse(gemText); } catch (_) {}
+        const content =
+          parsed?.candidates?.[0]?.content?.parts?.[0]?.text ??
+          parsed?.content ??
+          gemText;
+        return new Response(JSON.stringify({ content, raw: parsed ?? gemText }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      } catch (fallbackErr) {
+        const msg = (fallbackErr?.name === 'TimeoutError' || `${fallbackErr?.message || ''}`.toLowerCase().includes('timeout'))
+          ? `gemini upstream timeout after ${timeoutMs}ms`
+          : fallbackErr?.message || 'gemini_error';
         return new Response(JSON.stringify({ error: msg }), {
           status: 502,
           headers: { 'Content-Type': 'application/json', ...corsHeaders },
