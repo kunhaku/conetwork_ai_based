@@ -1,6 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import yahooFinance from 'yahoo-finance2';
 import { hasSupabaseEnv } from './dbClient.js';
 import {
   upsertGraph,
@@ -17,6 +16,7 @@ const PORT = process.env.PORT || 8787;
 const PUTER_URL = process.env.PUTER_API_URL || 'https://api.puter.com/v2/openai/chat/completions';
 const OPENAI_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
+const ALPHA_VANTAGE_KEY = process.env.ALPHA_VANTAGE_KEY || '';
 const DEBUG = process.env.DEBUG_LOG === '1';
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 30000);
 
@@ -152,30 +152,55 @@ app.post('/api/finance/quote', async (req, res) => {
   if (!Array.isArray(names) || names.length === 0) {
     return res.status(400).json({ error: 'names must be a non-empty array' });
   }
+  if (!ALPHA_VANTAGE_KEY) {
+    return res.status(500).json({ error: 'ALPHA_VANTAGE_KEY not configured' });
+  }
   const updates = {};
 
   for (const name of names) {
     try {
-      const search = await yahooFinance.search(name, { quotesCount: 1, newsCount: 0 });
-      const symbol = search?.quotes?.[0]?.symbol;
+      const symbol = String(name || '').trim();
       if (!symbol) {
         updates[name] = { note: 'ticker_not_found' };
         continue;
       }
 
-      const summary = await yahooFinance.quoteSummary(symbol, { modules: ['price', 'summaryProfile'] });
-      const price = summary?.price;
-      const profile = summary?.summaryProfile;
-      const capRaw = price?.marketCap?.raw ?? price?.marketCap;
-      const currency = price?.currency || 'USD';
+      const quoteResp = await fetch(
+        `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(ALPHA_VANTAGE_KEY)}`
+      );
+      const quoteJson = await quoteResp.json();
+      if (quoteJson?.Note || quoteJson?.Information) {
+        updates[name] = { note: quoteJson.Note || quoteJson.Information };
+        continue;
+      }
+      const quote = quoteJson?.['Global Quote'];
+      if (!quote || Object.keys(quote).length === 0) {
+        updates[name] = { note: 'ticker_not_found' };
+        continue;
+      }
+
+      const overviewResp = await fetch(
+        `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(ALPHA_VANTAGE_KEY)}`
+      );
+      const overviewJson = await overviewResp.json();
+      if (overviewJson?.Note || overviewJson?.Information) {
+        updates[name] = { note: overviewJson.Note || overviewJson.Information };
+        continue;
+      }
+
+      const ticker = quote['01. symbol'] || symbol;
+      const currency = overviewJson?.Currency || 'USD';
+      const latestPriceRaw = quote['05. price'] ?? quote['02. open'];
+      const capRaw = overviewJson?.MarketCapitalization;
+
       updates[name] = {
-        ticker: symbol,
-        primaryExchange: price?.exchangeName || price?.market || undefined,
-        latestPrice: formatMoney(price?.regularMarketPrice?.raw ?? price?.regularMarketPrice, currency),
+        ticker,
+        primaryExchange: overviewJson?.Exchange || undefined,
+        latestPrice: formatMoney(latestPriceRaw, currency),
         marketCap: formatMoney(capRaw, currency),
-        sector: profile?.sector,
-        industry: profile?.industry,
-        country: profile?.country,
+        sector: overviewJson?.Sector,
+        industry: overviewJson?.Industry,
+        country: overviewJson?.Country,
         sizeBucket: sizeBucketFromCap(capRaw),
       };
     } catch (e) {
