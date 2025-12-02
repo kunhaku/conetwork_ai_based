@@ -1,11 +1,110 @@
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+};
+
+const formatMoney = (value, currency = 'USD') => {
+  if (value === undefined || value === null || Number.isNaN(Number(value))) return undefined;
+  const n = Number(value);
+  const abs = Math.abs(n);
+  const prefix = currency === 'USD' ? '$' : '';
+  if (abs >= 1e12) return `${n >= 0 ? '' : '-'}${prefix}${(abs / 1e12).toFixed(2)}T`;
+  if (abs >= 1e9) return `${n >= 0 ? '' : '-'}${prefix}${(abs / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${n >= 0 ? '' : '-'}${prefix}${(abs / 1e6).toFixed(2)}M`;
+  return `${prefix}${n.toFixed(2)}`;
+};
+
+const sizeBucketFromCap = (cap) => {
+  if (!cap || Number.isNaN(Number(cap))) return undefined;
+  const v = Number(cap);
+  if (v >= 200e9) return 'Mega';
+  if (v >= 10e9) return 'Large';
+  if (v >= 2e9) return 'Mid';
+  if (v >= 300e6) return 'Small';
+  return 'Micro';
+};
+
+async function handleFinanceQuote(req, env) {
+  if (!env.ALPHA_VANTAGE_KEY) {
+    return new Response(JSON.stringify({ error: 'ALPHA_VANTAGE_KEY not configured' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    });
+  }
+
+  let body;
+  try { body = await req.json(); } catch (_) {}
+  const names = body?.names;
+  if (!Array.isArray(names) || names.length === 0) {
+    return new Response(JSON.stringify({ error: 'names must be a non-empty array' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    });
+  }
+
+  const updates = {};
+
+  for (const name of names) {
+    try {
+      const symbol = String(name || '').trim();
+      if (!symbol) {
+        updates[name] = { note: 'ticker_not_found' };
+        continue;
+      }
+
+      const qResp = await fetch(
+        `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(env.ALPHA_VANTAGE_KEY)}`
+      );
+      const qJson = await qResp.json();
+      if (qJson?.Note || qJson?.Information) {
+        updates[name] = { note: qJson.Note || qJson.Information };
+        continue;
+      }
+      const quote = qJson?.['Global Quote'];
+      if (!quote || Object.keys(quote).length === 0) {
+        updates[name] = { note: 'ticker_not_found' };
+        continue;
+      }
+
+      const oResp = await fetch(
+        `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(env.ALPHA_VANTAGE_KEY)}`
+      );
+      const oJson = await oResp.json();
+      if (oJson?.Note || oJson?.Information) {
+        updates[name] = { note: oJson.Note || oJson.Information };
+        continue;
+      }
+
+      const ticker = quote['01. symbol'] || symbol;
+      const currency = oJson?.Currency || 'USD';
+      const latestPriceRaw = quote['05. price'] ?? quote['02. open'];
+      const capRaw = oJson?.MarketCapitalization;
+
+      updates[name] = {
+        ticker,
+        primaryExchange: oJson?.Exchange || undefined,
+        latestPrice: formatMoney(latestPriceRaw, currency),
+        marketCap: formatMoney(capRaw, currency),
+        sector: oJson?.Sector,
+        industry: oJson?.Industry,
+        country: oJson?.Country,
+        sizeBucket: sizeBucketFromCap(capRaw),
+      };
+    } catch (e) {
+      updates[name] = { note: `lookup_failed: ${e?.message || e}` };
+    }
+  }
+
+  return new Response(JSON.stringify({ updates }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json', ...corsHeaders },
+  });
+}
+
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-    };
 
     if (req.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders });
@@ -29,6 +128,10 @@ export default {
       }), {
         headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
+    }
+
+    if (url.pathname === '/api/finance/quote') {
+      return handleFinanceQuote(req, env);
     }
 
     if (url.pathname !== '/api/run') {
