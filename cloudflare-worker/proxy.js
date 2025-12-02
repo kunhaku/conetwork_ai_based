@@ -232,15 +232,15 @@ async function upsertFacts(supabase, nodeIdMap, nodes = [], sourceIdMap = {}) {
         confidence_score: 0.6,
         source_id: fact.source_id ? sourceIdMap[fact.source_id] : null,
       };
-      const { data: existing, error: selErr } = await supabase
+      let sel = supabase
         .from('facts')
         .select('id')
         .eq('node_id', dbId)
-        .eq('attribute', base.attribute)
-        .eq('value_text', base.value_text)
-        .eq('value_numeric', base.value_numeric)
-        .eq('value_json', base.value_json)
-        .maybeSingle();
+        .eq('attribute', base.attribute);
+      sel = base.value_text !== null ? sel.eq('value_text', base.value_text) : sel.is('value_text', null);
+      sel = base.value_numeric !== null ? sel.eq('value_numeric', base.value_numeric) : sel.is('value_numeric', null);
+      sel = base.value_json !== null ? sel.eq('value_json', base.value_json) : sel.is('value_json', null);
+      const { data: existing, error: selErr } = await sel.maybeSingle();
       if (selErr) throw selErr;
       if (existing?.id) continue;
       const { error } = await supabase.from('facts').insert(base);
