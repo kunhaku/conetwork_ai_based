@@ -298,6 +298,32 @@ async function upsertEdges(supabase, links = [], nodeIdMap = {}, sourceIdMap = {
   }
 }
 
+async function upsertSingleFact(supabase, fact = {}) {
+  const base = {
+    node_id: fact.node_id,
+    attribute: fact.attribute,
+    value_text: fact.value_text ?? null,
+    value_numeric: fact.value_numeric ?? null,
+    value_json: fact.value_json ?? null,
+    confidence_score: fact.confidence_score ?? 0.6,
+    source_id: fact.source_id ?? null,
+  };
+  let sel = supabase
+    .from('facts')
+    .select('id')
+    .eq('node_id', base.node_id)
+    .eq('attribute', base.attribute);
+  sel = base.value_text !== null ? sel.eq('value_text', base.value_text) : sel.is('value_text', null);
+  sel = base.value_numeric !== null ? sel.eq('value_numeric', base.value_numeric) : sel.is('value_numeric', null);
+  sel = base.value_json !== null ? sel.eq('value_json', base.value_json) : sel.is('value_json', null);
+  const { data: existing, error: selErr } = await sel.maybeSingle();
+  if (selErr) throw selErr;
+  if (existing?.id) return existing.id;
+  const { data, error } = await supabase.from('facts').insert(base).select('id').maybeSingle();
+  if (error) throw error;
+  return data?.id;
+}
+
 async function handleFinanceQuote(req, env) {
   if (!env.FINNHUB_API_KEY) {
     return jsonResponse({ error: 'FINNHUB_API_KEY not configured' }, 500);
@@ -407,6 +433,28 @@ async function handleGraphUpsert(req, env) {
     await ensureAliases(supabase, nodeIdMap, graph.nodes || []);
     await upsertFacts(supabase, nodeIdMap, graph.nodes || [], sourceIdMap);
     await upsertEdges(supabase, graph.links || [], nodeIdMap, sourceIdMap);
+    // Attach run-level summary/report as facts on the first node (if any)
+    const firstNode = (graph.nodes || [])[0];
+    const attachId = firstNode ? nodeIdMap[firstNode.id ?? firstNode.name] : null;
+    if (attachId) {
+      const summaryText = graph.summary || graph.report?.themeOverview;
+      if (summaryText) {
+        await upsertSingleFact(supabase, {
+          node_id: attachId,
+          attribute: 'summary',
+          value_text: summaryText,
+          confidence_score: 0.6,
+        });
+      }
+      if (graph.report) {
+        await upsertSingleFact(supabase, {
+          node_id: attachId,
+          attribute: 'report',
+          value_json: graph.report,
+          confidence_score: 0.6,
+        });
+      }
+    }
     return jsonResponse({
       ok: true,
       counts: {
