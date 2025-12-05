@@ -1,7 +1,7 @@
 
 
-import React from 'react';
-import { GraphNode, UnifiedGraph, PipelineStatus } from '../types';
+import React, { useMemo } from 'react';
+import { GraphNode, UnifiedGraph, PipelineStatus, GraphSource } from '../types';
 import { LINK_COLORS } from '../constants';
 
 interface DetailPanelProps {
@@ -34,8 +34,22 @@ const DetailPanel: React.FC<DetailPanelProps> = ({ graphData, selectedNode, pipe
     );
   }
 
+  const sourceMap = useMemo(() => {
+    const map: Record<number, GraphSource> = {};
+    (graphData?.sources || []).forEach((s) => {
+      if (s && typeof s.id === 'number') {
+        map[s.id] = s;
+      }
+    });
+    return map;
+  }, [graphData]);
+
   const relatedLinks = selectedNode && graphData
-    ? graphData.links.filter((l: any) => l.source.id === selectedNode.id || l.target.id === selectedNode.id)
+    ? graphData.links.filter((l: any) => {
+        const srcId = typeof l.source === 'object' ? l.source.id : l.source;
+        const tgtId = typeof l.target === 'object' ? l.target.id : l.target;
+        return srcId === selectedNode.id || tgtId === selectedNode.id;
+      })
     : [];
 
   return (
@@ -206,8 +220,12 @@ const DetailPanel: React.FC<DetailPanelProps> = ({ graphData, selectedNode, pipe
                   <p className="text-sm text-gray-400 italic">No direct connections found.</p>
                 ) : (
                   relatedLinks.map((link: any, idx: number) => {
-                    const isSource = link.source.id === selectedNode.id;
+                    const srcId = typeof link.source === 'object' ? link.source.id : link.source;
+                    const tgtId = typeof link.target === 'object' ? link.target.id : link.target;
+                    const isSource = srcId === selectedNode.id;
                     const counterpart = isSource ? link.target : link.source;
+                    const sourceIds = Array.isArray(link.sourceIds) ? link.sourceIds.filter((id: any) => typeof id === 'number') : [];
+                    const sources = sourceIds.map((sid: number) => sourceMap[sid]).filter(Boolean);
                     
                     return (
                       <div key={idx} className={`group p-3 border rounded-lg hover:bg-white/5 transition-all cursor-default relative
@@ -228,6 +246,38 @@ const DetailPanel: React.FC<DetailPanelProps> = ({ graphData, selectedNode, pipe
                         <p className="text-xs text-gray-200 border-t border-white/10 pt-2 mt-1">
                             {link.description}
                         </p>
+                        <div className="mt-2 pt-2 border-t border-white/10">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Evidence</p>
+                          {sources.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {sources.map((src: GraphSource, sIdx: number) => {
+                                const label = src.title || src.url || `Source ${src.id}`;
+                                return src.url ? (
+                                  <a
+                                    key={src.id ?? sIdx}
+                                    href={src.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="px-2 py-1 rounded bg-white/5 border border-white/10 text-[10px] text-cyan-200 hover:border-cyan-400/60 hover:text-white"
+                                    title={src.note || label}
+                                  >
+                                    {label}
+                                  </a>
+                                ) : (
+                                  <span
+                                    key={src.id ?? sIdx}
+                                    className="px-2 py-1 rounded bg-white/5 border border-white/10 text-[10px] text-gray-300"
+                                    title={src.note || label}
+                                  >
+                                    {label}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-gray-500">No source provided</p>
+                          )}
+                        </div>
                       </div>
                     );
                   })
