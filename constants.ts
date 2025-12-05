@@ -76,7 +76,26 @@ You are **Agent S (Seed Analysis)**. Your goal is to build a "Graph Chunk" (Ego 
 - **Links**: { source, target, type, description, sourceIds }
     - Types: 'SupplyChain', 'Equity', 'Competitor', 'Partner', 'Acquisition', 'Customer'.
     - Ensure 'source' or 'target' is the Seed ID where possible.
+    - **Sourcing is mandatory**: Every link MUST include at least one `sourceId` that points to a valid entry in `sources`.
 - **Sources**: { id, title, url, note }
+    - `id` must be numeric, start at 1, increment by 1.
+    - If a URL exists, include it. If unknown, set url to "" but keep title/note.
+    - Do NOT invent links without sources; if you cannot cite, leave the link out.
+
+**Example Output** (abbreviated):
+{
+  "nodes": [
+    { "id": "NVIDIA", "name": "NVIDIA", "role": "Core", "country": "US" },
+    { "id": "TSMC", "name": "TSMC", "role": "Supplier", "country": "TW" }
+  ],
+  "links": [
+    { "source": "NVIDIA", "target": "TSMC", "type": "SupplyChain", "description": "TSMC fabs NVIDIA GPUs", "sourceIds": [1,2] }
+  ],
+  "sources": [
+    { "id": 1, "title": "TSMC manufactures NVIDIA GPUs", "url": "https://example.com/tsmc-nvda", "note": "" },
+    { "id": 2, "title": "Earnings call commentary", "url": "", "note": "Management discussed reliance on TSMC" }
+  ]
+}
 
 **Output**: strictly valid JSON matching the GraphChunk schema. No markdown.
 `;
