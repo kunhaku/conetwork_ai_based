@@ -14,6 +14,18 @@ type ChatOptions = { temperature?: number; model?: string };
 const FINANCE_API = import.meta.env.VITE_FINANCE_API || '/api/finance/quote';
 const DB_API = import.meta.env.VITE_DB_API || '/api/db/graph/upsert';
 
+// Normalize company identifiers to avoid duplicates from casing/punctuation
+const normalizeId = (name: string | undefined | null) => {
+  if (!name) return "";
+  const cleaned = name
+    .toLowerCase()
+    .replace(/[,.'"]/g, " ")
+    .replace(/\b(inc|corp|co|ltd|llc|plc|company|corporation)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned;
+};
+
 // Helper to parse JSON from Markdown code blocks or raw text
 const safeParseJSON = (text: string) => {
   if (!text) return null;
@@ -229,6 +241,17 @@ export const runPipeline = async (
   onSeedsInferred?: (seeds: string[]) => void
 ): Promise<UnifiedGraph> => {
   let { seeds, topic } = request;
+  // Normalize and de-duplicate seeds up front to avoid duplicate Core nodes
+  const seedSet = new Set<string>();
+  seeds = seeds
+    .map(s => s.trim())
+    .filter(s => s.length > 0)
+    .filter(s => {
+      const cid = normalizeId(s);
+      if (!cid || seedSet.has(cid)) return false;
+      seedSet.add(cid);
+      return true;
+    });
   
   // CASE A: Seeds exist, Topic missing -> Infer Topic
   if ((!topic || topic.trim() === "") && seeds.length > 0) {
@@ -248,7 +271,19 @@ export const runPipeline = async (
        onStatus({ stage: 'agent-s', message: `Agent T: Inferring key players for '${topic}'...`, progress: 2 });
        const inferredSeeds = await inferSeeds(topic);
        if (inferredSeeds && inferredSeeds.length > 0) {
-           seeds = inferredSeeds;
+           // normalize inferred seeds
+           const inferredSet = new Set<string>();
+           seeds = inferredSeeds
+             .map(s => s.trim())
+             .filter(s => s.length > 0)
+             .filter(s => {
+               const cid = normalizeId(s);
+               if (!cid || inferredSet.has(cid)) return false;
+               inferredSet.add(cid);
+               return true;
+             });
+           seedSet.clear();
+           seeds.forEach(s => seedSet.add(normalizeId(s)));
            if (onSeedsInferred) onSeedsInferred(seeds);
        } else {
            // Fallback creates a graph about the topic generally? 
@@ -258,7 +293,9 @@ export const runPipeline = async (
   }
 
   let consolidatedGraph: UnifiedGraph = { summary: "", nodes: [], links: [], sources: [] };
-  const nodeIdSet = new Set<string>();
+  const nodeIdSet = new Set<string>(); // canonical ids
+  const rawToCanonical = new Map<string, string>();
+  const canonicalToNode = new Map<string, GraphNode>();
 
   const emitUpdate = () => {
       onGraphUpdate({
@@ -266,6 +303,70 @@ export const runPipeline = async (
           nodes: [...consolidatedGraph.nodes],
           links: [...consolidatedGraph.links]
       });
+  };
+
+  const registerCanonical = (rawId: string, canonicalId: string) => {
+    if (!rawId) return;
+    rawToCanonical.set(rawId, canonicalId);
+  };
+
+  const mergeNode = (node: GraphNode) => {
+    const rawId = node.id || node.name;
+    const cid = normalizeId(rawId || "");
+    if (!cid) return;
+    registerCanonical(rawId || "", cid);
+    registerCanonical(node.name || "", cid);
+
+    const existing = canonicalToNode.get(cid);
+    if (existing) {
+      // preserve Core if any source is Core
+      if (node.role === 'Core' || existing.role === 'Core') existing.role = 'Core';
+      // merge scalar fields if missing
+      const fields: (keyof GraphNode)[] = ['ticker','primaryExchange','sector','industry','sizeBucket','growthProfile','riskNotes','latestPrice','marketCap','revenue','netIncome','country','note'];
+      fields.forEach(f => {
+        const val = (existing as any)[f];
+        const incoming = (node as any)[f];
+        if (!val && incoming) (existing as any)[f] = incoming;
+      });
+      // merge keyThemes array
+      if (node.keyThemes && node.keyThemes.length) {
+        const merged = new Set([...(existing.keyThemes || []), ...node.keyThemes]);
+        existing.keyThemes = Array.from(merged);
+      }
+      return existing;
+    } else {
+      // normalize id to canonical for consistency
+      const newNode = { ...node, id: cid };
+      canonicalToNode.set(cid, newNode);
+      nodeIdSet.add(cid);
+      consolidatedGraph.nodes.push(newNode);
+      return newNode;
+    }
+  };
+
+  const mapToCanonicalId = (value: any) => {
+    const raw = typeof value === 'object' ? (value?.id || value?.name || '') : String(value || '');
+    const fromMap = rawToCanonical.get(raw);
+    if (fromMap) return fromMap;
+    return normalizeId(raw);
+  };
+
+  const addLink = (link: GraphLink) => {
+    const src = mapToCanonicalId(link.source);
+    const tgt = mapToCanonicalId(link.target);
+    if (!src || !tgt) return;
+    if (!nodeIdSet.has(src) || !nodeIdSet.has(tgt)) return;
+    const exists = consolidatedGraph.links.some(l => {
+      const lSrc = mapToCanonicalId(l.source);
+      const lTgt = mapToCanonicalId(l.target);
+      return lSrc === src && lTgt === tgt && l.type === link.type;
+    });
+    if (exists) return;
+    consolidatedGraph.links.push({
+      ...link,
+      source: src,
+      target: tgt,
+    });
   };
 
   // --- STAGE 1: SEED ANALYSIS ---
@@ -278,30 +379,21 @@ export const runPipeline = async (
     
     if (Array.isArray(result.nodes)) {
       result.nodes.forEach(node => {
-        const isSeed = seeds.some(s => s.trim().toLowerCase() === node.name.toLowerCase() || s.trim().toLowerCase() === node.id.toLowerCase());
+        const isSeed = seedSet.has(normalizeId(node.name)) || seedSet.has(normalizeId(node.id));
         if (isSeed) {
             node.role = 'Core';
         }
 
-        if (!nodeIdSet.has(node.id)) {
-          consolidatedGraph.nodes.push(node);
-          nodeIdSet.add(node.id);
-        } else {
-            if (isSeed) {
-                const existing = consolidatedGraph.nodes.find(n => n.id === node.id);
-                if (existing) existing.role = 'Core';
-            }
-        }
+        const merged = mergeNode(node);
+        // ensure raw->canonical map knows about provided ids/names
+        if (node.id) registerCanonical(node.id, normalizeId(node.id));
+        if (node.name) registerCanonical(node.name, normalizeId(node.name));
+        if (!merged) return;
       });
     }
 
     if (Array.isArray(result.links)) {
-      result.links.forEach(link => {
-         const exists = consolidatedGraph.links.some(l => 
-           (l.source === link.source && l.target === link.target && l.type === link.type)
-         );
-         if (!exists) consolidatedGraph.links.push(link);
-      });
+      result.links.forEach(link => addLink(link));
     }
 
     const currentMaxId = Math.max(0, ...consolidatedGraph.sources.map(s => s.id));
@@ -333,7 +425,9 @@ export const runPipeline = async (
   
   if (Object.keys(qUpdates).length > 0) {
       consolidatedGraph.nodes = consolidatedGraph.nodes.map(node => {
-          const update = qUpdates[node.name] || qUpdates[node.id];
+          const normName = normalizeId(node.name);
+          const normId = normalizeId(node.id);
+          const update = qUpdates[node.name] || qUpdates[node.id] || qUpdates[normName] || qUpdates[normId];
           if (update) {
               return { 
                   ...node, 
@@ -353,9 +447,7 @@ export const runPipeline = async (
     const xResult = await runAgentX(consolidatedGraph.nodes, topic);
     if (xResult && Array.isArray(xResult.links)) {
       xResult.links.forEach(link => {
-        if (nodeIdSet.has(link.source as string) && nodeIdSet.has(link.target as string)) {
-             consolidatedGraph.links.push({ ...link, isKeyRelationship: true });
-        }
+        addLink({ ...link, isKeyRelationship: true });
       });
       
       const currentMaxId = Math.max(0, ...consolidatedGraph.sources.map(s => s.id));
@@ -385,7 +477,7 @@ export const runPipeline = async (
   
   if (Object.keys(fUpdates).length > 0) {
     consolidatedGraph.nodes = consolidatedGraph.nodes.map(node => {
-      const updates = fUpdates[node.id];
+      const updates = fUpdates[node.id] || fUpdates[normalizeId(node.id)] || fUpdates[normalizeId(node.name)];
       // F adds qualitative data (Risk, Themes, etc.), keeping the Quantitative data from Q
       return updates ? { ...node, ...updates } : node;
     });
