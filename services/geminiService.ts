@@ -26,6 +26,32 @@ const normalizeId = (name: string | undefined | null) => {
   return cleaned;
 };
 
+// Identify generic / non-company labels we want to drop (e.g., "Cloud Providers")
+const isGenericName = (name: string | undefined | null) => {
+  const n = normalizeId(name);
+  if (!n) return false;
+  const genericTerms = [
+    "cloud provider",
+    "cloud providers",
+    "server manufacturer",
+    "server manufacturers",
+    "networking company",
+    "networking companies",
+    "chip maker",
+    "chip makers",
+    "vendors",
+    "suppliers",
+    "customers",
+    "partners",
+    "distributors",
+    "oem",
+    "odm",
+    "contract manufacturer",
+    "contract manufacturers"
+  ];
+  return genericTerms.some(term => n === term || n.includes(term));
+};
+
 // Helper to parse JSON from Markdown code blocks or raw text
 const safeParseJSON = (text: string) => {
   if (!text) return null;
@@ -245,7 +271,7 @@ export const runPipeline = async (
   const seedSet = new Set<string>();
   seeds = seeds
     .map(s => s.trim())
-    .filter(s => s.length > 0)
+    .filter(s => s.length > 0 && !isGenericName(s))
     .filter(s => {
       const cid = normalizeId(s);
       if (!cid || seedSet.has(cid)) return false;
@@ -275,7 +301,7 @@ export const runPipeline = async (
            const inferredSet = new Set<string>();
            seeds = inferredSeeds
              .map(s => s.trim())
-             .filter(s => s.length > 0)
+             .filter(s => s.length > 0 && !isGenericName(s))
              .filter(s => {
                const cid = normalizeId(s);
                if (!cid || inferredSet.has(cid)) return false;
@@ -313,6 +339,7 @@ export const runPipeline = async (
   const mergeNode = (node: GraphNode) => {
     const rawId = node.id || node.name;
     const cid = normalizeId(rawId || "");
+    if (isGenericName(rawId) || isGenericName(node.name)) return;
     if (!cid) return;
     registerCanonical(rawId || "", cid);
     registerCanonical(node.name || "", cid);
@@ -346,6 +373,7 @@ export const runPipeline = async (
 
   const mapToCanonicalId = (value: any) => {
     const raw = typeof value === 'object' ? (value?.id || value?.name || '') : String(value || '');
+    if (isGenericName(raw)) return "";
     const fromMap = rawToCanonical.get(raw);
     if (fromMap) return fromMap;
     return normalizeId(raw);
@@ -355,6 +383,7 @@ export const runPipeline = async (
     const src = mapToCanonicalId(link.source);
     const tgt = mapToCanonicalId(link.target);
     if (!src || !tgt) return;
+    if (isGenericName(src) || isGenericName(tgt)) return;
     if (!nodeIdSet.has(src) || !nodeIdSet.has(tgt)) return;
     const exists = consolidatedGraph.links.some(l => {
       const lSrc = mapToCanonicalId(l.source);
