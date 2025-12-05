@@ -77,9 +77,9 @@ You are **Agent S (Seed Analysis)**. Your goal is to build a "Graph Chunk" (Ego 
     - Types: 'SupplyChain', 'Equity', 'Competitor', 'Partner', 'Acquisition', 'Customer'.
     - Ensure 'source' or 'target' is the Seed ID where possible.
     - **Sourcing is mandatory**: Every link MUST include at least one sourceId that points to a valid entry in sources.
-- **Sources**: { id, title, url, note }
+    - **Sources**: { id, title, url, note }
     - id must be numeric, start at 1, increment by 1.
-    - If a URL exists, include it. If unknown, set url to "" but keep title/note.
+    - Every source MUST include a non-empty url. If you cannot cite with a URL, DO NOT include the link.
     - Do NOT invent links without sources; if you cannot cite, leave the link out.
 
 **Example Output** (abbreviated):
@@ -147,11 +147,12 @@ You are **Agent X (Cross-Relation Analysis)**. Your goal is to identify missing 
 - **Strict Limit**: Only output the **TOP 10-20 most important** relationships found. Do NOT flood the graph.
 - **Quality Control**: If there is no clear evidence of a relationship, do NOT invent one.
 - **Prefer Empty**: If no *meaningful* or *confirmed* cross-relations are found, return an empty array.
+- **Sources are mandatory**: Each link MUST include at least one sourceId, and every referenced source MUST have a non-empty url. If you cannot cite, skip that link.
 
 **Output**: strictly valid JSON:
 {
-  "links": [ { "source": "ID", "target": "ID", "type": "Type", "description": "Desc", "isKeyRelationship": true } ],
-  "sources": []
+  "links": [ { "source": "ID", "target": "ID", "type": "Type", "description": "Desc", "isKeyRelationship": true, "sourceIds": [1] } ],
+  "sources": [ { "id": 1, "title": "Press release", "url": "https://...", "note": "" } ]
 }
 `;
 

@@ -173,7 +173,7 @@ const runAgentQ = async (nodes: GraphNode[]): Promise<Record<string, Partial<Gra
 
 
 // --- STAGE 2: AGENT X (Cross-Relations) ---
-const runAgentX = async (nodes: GraphNode[], topic: string): Promise<{ links: GraphLink[], sources: GraphSource[] } | null> => {
+const runAgentX = async (nodes: GraphNode[], topic: string): Promise<{ links: GraphLink[], sources: GraphSource[] }> => {
   // Optimization: Filter nodes based on Priority using the REAL data from Agent Q
   // We prioritize: Core nodes, and nodes identified as Mega/Large/Mid cap
   const prioritizedNodes = nodes.filter(n => {
@@ -186,17 +186,56 @@ const runAgentX = async (nodes: GraphNode[], topic: string): Promise<{ links: Gr
   const nodesToProcess = prioritizedNodes.length >= 2 ? prioritizedNodes : nodes;
   const nodeNames = nodesToProcess.map(n => n.name);
 
-  try {
-    const response = await callPuterChat(
-      AGENT_X_SYSTEM_INSTRUCTION,
-      JSON.stringify({ nodes: nodeNames, topic }),
-      { temperature: 0.1 }
-    );
-    return safeParseJSON(response || "");
-  } catch (e) {
-    console.error("Agent X failed", e);
-    return null;
+  const MIN_LINKS = 10;
+  const MAX_LINKS = 20;
+  const MAX_ATTEMPTS = 3;
+
+  const callOnce = async (): Promise<{ links: GraphLink[], sources: GraphSource[] }> => {
+    try {
+      const response = await callPuterChat(
+        AGENT_X_SYSTEM_INSTRUCTION,
+        JSON.stringify({ nodes: nodeNames, topic }),
+        { temperature: 0.1 }
+      );
+      const parsed = safeParseJSON(response || "") || {};
+      const rawSources = Array.isArray(parsed.sources) ? parsed.sources : [];
+      const validSources: GraphSource[] = rawSources
+        .filter((s: any) => s && typeof s.id === 'number' && typeof s.url === 'string' && s.url.trim().length > 0)
+        .map((s: any) => ({
+          id: s.id,
+          title: s.title || s.url,
+          url: s.url,
+          note: s.note || ''
+        }));
+      const sourceIdSet = new Set(validSources.map(s => s.id));
+
+      const rawLinks = Array.isArray(parsed.links) ? parsed.links : [];
+      const filteredLinks: GraphLink[] = rawLinks
+        .filter((l: any) => l && l.source && l.target && l.type)
+        .map((l: any) => {
+          const ids = Array.isArray(l.sourceIds) ? l.sourceIds.filter((id: any) => sourceIdSet.has(id)) : [];
+          return { ...l, sourceIds: ids };
+        })
+        .filter((l: any) => Array.isArray(l.sourceIds) && l.sourceIds.length > 0)
+        .slice(0, MAX_LINKS);
+
+      return { links: filteredLinks, sources: validSources };
+    } catch (e) {
+      console.error("Agent X failed", e);
+      return { links: [], sources: [] };
+    }
+  };
+
+  let best = { links: [] as GraphLink[], sources: [] as GraphSource[] };
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const result = await callOnce();
+    if (result.links.length > best.links.length) {
+      best = result;
+    }
+    if (best.links.length >= MIN_LINKS) break;
   }
+
+  return best;
 };
 
 // --- STAGE 3: AGENT F (Qualitative Analyst) ---
@@ -434,25 +473,39 @@ export const runPipeline = async (
       });
     }
 
-    if (Array.isArray(result.links)) {
-      result.links.forEach(link => addLink(link));
-    }
-
+    // Normalize sources first to establish id remapping
     const currentMaxId = Math.max(0, ...consolidatedGraph.sources.map(s => s.id));
+    let nextSourceId = currentMaxId + 1;
+    const sourceIdMap = new Map<number, number>();
+    const normalizedSources: GraphSource[] = [];
+
     if (Array.isArray(result.sources)) {
       result.sources.forEach((s: any) => {
-        let sourceObj = s;
-        if (typeof s === 'string') {
-            sourceObj = { id: 0, title: s, url: '', note: '' };
-        }
-        
-        if (!sourceObj || typeof sourceObj !== 'object') return;
-        if (typeof sourceObj.id !== 'number') sourceObj.id = 0;
-
-        sourceObj.id += currentMaxId;
-        consolidatedGraph.sources.push(sourceObj);
+        if (!s || typeof s !== 'object') return;
+        if (typeof s.id !== 'number') return;
+        if (typeof s.url !== 'string' || s.url.trim().length === 0) return;
+        const newId = nextSourceId++;
+        sourceIdMap.set(s.id, newId);
+        normalizedSources.push({
+          id: newId,
+          title: s.title || s.url,
+          url: s.url,
+          note: s.note || ''
+        });
       });
     }
+
+    if (Array.isArray(result.links)) {
+      result.links.forEach((link: any) => {
+        const mappedIds = Array.isArray(link.sourceIds)
+          ? link.sourceIds.map((id: any) => sourceIdMap.get(id)).filter((id: any) => typeof id === 'number')
+          : [];
+        if (!mappedIds.length) return;
+        addLink({ ...link, sourceIds: mappedIds });
+      });
+    }
+
+    normalizedSources.forEach(src => consolidatedGraph.sources.push(src));
   });
 
   emitUpdate();
@@ -488,25 +541,36 @@ export const runPipeline = async (
   if (consolidatedGraph.nodes.length > 2) {
     const xResult = await runAgentX(consolidatedGraph.nodes, topic);
     if (xResult && Array.isArray(xResult.links)) {
-      xResult.links.forEach(link => {
-        addLink({ ...link, isKeyRelationship: true });
-      });
-      
       const currentMaxId = Math.max(0, ...consolidatedGraph.sources.map(s => s.id));
+      let nextSourceId = currentMaxId + 1;
+      const sourceIdMap = new Map<number, number>();
+      const normalizedSources: GraphSource[] = [];
+
       if (Array.isArray(xResult.sources)) {
         xResult.sources.forEach((s: any) => {
-            let sourceObj = s;
-            if (typeof s === 'string') {
-                sourceObj = { id: 0, title: s, url: '', note: '' };
-            }
-
-             if (!sourceObj || typeof sourceObj !== 'object') return;
-             if (typeof sourceObj.id !== 'number') sourceObj.id = 0;
-
-            sourceObj.id += currentMaxId;
-            consolidatedGraph.sources.push(sourceObj);
+          if (!s || typeof s !== 'object') return;
+          if (typeof s.id !== 'number') return;
+          if (typeof s.url !== 'string' || s.url.trim().length === 0) return;
+          const newId = nextSourceId++;
+          sourceIdMap.set(s.id, newId);
+          normalizedSources.push({
+            id: newId,
+            title: s.title || s.url,
+            url: s.url,
+            note: s.note || ''
+          });
         });
       }
+
+      xResult.links.forEach(link => {
+        const mappedIds = Array.isArray(link.sourceIds)
+          ? link.sourceIds.map((id: any) => sourceIdMap.get(id)).filter((id: any) => typeof id === 'number')
+          : [];
+        if (!mappedIds.length) return;
+        addLink({ ...link, isKeyRelationship: true, sourceIds: mappedIds });
+      });
+
+      normalizedSources.forEach(src => consolidatedGraph.sources.push(src));
     }
   }
 
