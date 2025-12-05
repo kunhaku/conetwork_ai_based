@@ -13,6 +13,15 @@ import { callLLM } from "./llmClient";
 type ChatOptions = { temperature?: number; model?: string };
 const FINANCE_API = import.meta.env.VITE_FINANCE_API || '/api/finance/quote';
 const DB_API = import.meta.env.VITE_DB_API || '/api/db/graph/upsert';
+const isValidHttpUrl = (url: any) => {
+  if (typeof url !== 'string') return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch (_) {
+    return false;
+  }
+};
 
 // Normalize company identifiers to avoid duplicates from casing/punctuation
 const normalizeId = (name: string | undefined | null) => {
@@ -200,7 +209,7 @@ const runAgentX = async (nodes: GraphNode[], topic: string): Promise<{ links: Gr
       const parsed = safeParseJSON(response || "") || {};
       const rawSources = Array.isArray(parsed.sources) ? parsed.sources : [];
       const validSources: GraphSource[] = rawSources
-        .filter((s: any) => s && typeof s.id === 'number' && typeof s.url === 'string' && s.url.trim().length > 0)
+        .filter((s: any) => s && typeof s.id === 'number' && isValidHttpUrl(s.url))
         .map((s: any) => ({
           id: s.id,
           title: s.title || s.url,
@@ -483,7 +492,7 @@ export const runPipeline = async (
       result.sources.forEach((s: any) => {
         if (!s || typeof s !== 'object') return;
         if (typeof s.id !== 'number') return;
-        if (typeof s.url !== 'string' || s.url.trim().length === 0) return;
+        if (!isValidHttpUrl(s.url)) return;
         const newId = nextSourceId++;
         sourceIdMap.set(s.id, newId);
         normalizedSources.push({
@@ -550,7 +559,7 @@ export const runPipeline = async (
         xResult.sources.forEach((s: any) => {
           if (!s || typeof s !== 'object') return;
           if (typeof s.id !== 'number') return;
-          if (typeof s.url !== 'string' || s.url.trim().length === 0) return;
+          if (!isValidHttpUrl(s.url)) return;
           const newId = nextSourceId++;
           sourceIdMap.set(s.id, newId);
           normalizedSources.push({
