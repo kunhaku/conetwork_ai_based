@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { NavBar } from './components/landing/NavBar';
 import { ClusterGraph3D } from './components/landing/ClusterGraph3D';
 import { HeroOverlay } from './components/landing/HeroOverlay';
@@ -19,6 +19,40 @@ const reportBlocks = [
 ];
 
 export const LandingPage: React.FC = () => {
+  const [showGate, setShowGate] = useState(false);
+  const [inviteCode, setInviteCode] = useState('');
+  const [gateError, setGateError] = useState('');
+  const [waitlistEmail, setWaitlistEmail] = useState('');
+  const [waitlistName, setWaitlistName] = useState('');
+  const [waitlistConsent, setWaitlistConsent] = useState(false);
+  const [waitlistSubmitted, setWaitlistSubmitted] = useState(false);
+
+  const validCodes = useMemo(() => ['BETA2025', 'NEXUSBETA'], []);
+
+  const handleEnterApp = () => {
+    setShowGate(true);
+  };
+
+  const handleValidate = () => {
+    if (validCodes.includes(inviteCode.trim())) {
+      localStorage.setItem('beta_access', '1');
+      window.location.href = '/app';
+    } else {
+      setGateError('邀請碼無效或尚未開通，請確認或申請加入等待名單。');
+    }
+  };
+
+  const handleWaitlist = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!waitlistConsent || !waitlistEmail.trim()) {
+      setGateError('請填寫 Email 並勾選同意條款。');
+      return;
+    }
+    // Minimal client-side mock submission; replace with real API call to /waitlist
+    setWaitlistSubmitted(true);
+    setGateError('');
+  };
+
   return (
     <main className="relative w-full min-h-screen bg-gray-950 overflow-hidden text-white">
       <NavBar />
@@ -113,7 +147,7 @@ export const LandingPage: React.FC = () => {
               </p>
             </div>
             <a
-              href="/app"
+              onClick={handleEnterApp}
               className="px-4 py-2 rounded-full border border-white/20 text-xs font-semibold tracking-wider hover:bg-white/10 transition-colors"
             >
               Open Graph App
@@ -136,6 +170,82 @@ export const LandingPage: React.FC = () => {
       <footer className="relative z-10 py-12 text-center text-gray-600 text-sm border-t border-white/5 bg-gray-950/90">
         <p>&copy; {new Date().getFullYear()} NexusGraph AI. All rights reserved.</p>
       </footer>
+
+      {showGate && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-xl bg-gray-900/90 border border-white/10 rounded-2xl shadow-2xl p-6 space-y-4">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Beta Access</p>
+                <h3 className="text-xl font-bold text-white mt-1">輸入邀請碼或申請等待名單</h3>
+              </div>
+              <button className="text-gray-400 hover:text-white" onClick={() => setShowGate(false)}>×</button>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs text-gray-400">邀請碼</label>
+              <div className="flex gap-2">
+                <input
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value)}
+                  placeholder="輸入邀請碼"
+                  className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+                <button
+                  onClick={handleValidate}
+                  className="px-4 py-2 bg-cyan-500 text-white rounded-lg text-sm font-semibold hover:bg-cyan-400 transition"
+                >
+                  進入 App
+                </button>
+              </div>
+            </div>
+
+            <div className="border-t border-white/10 pt-4">
+              <p className="text-sm text-gray-300 mb-2">沒有邀請碼？加入等待名單，我們將依序開通。</p>
+              <form className="space-y-3" onSubmit={handleWaitlist}>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    type="email"
+                    required
+                    value={waitlistEmail}
+                    onChange={(e) => setWaitlistEmail(e.target.value)}
+                    placeholder="Email（必填）"
+                    className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                  <input
+                    type="text"
+                    value={waitlistName}
+                    onChange={(e) => setWaitlistName(e.target.value)}
+                    placeholder="稱呼（選填）"
+                    className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                </div>
+                <label className="flex items-start gap-2 text-xs text-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={waitlistConsent}
+                    onChange={(e) => setWaitlistConsent(e.target.checked)}
+                    className="mt-1"
+                  />
+                  <span>我同意 Beta 條款與隱私政策</span>
+                </label>
+                <button
+                  type="submit"
+                  className="w-full bg-white text-black rounded-lg py-2 font-semibold hover:translate-y-[-1px] hover:shadow-[0_10px_30px_rgba(0,0,0,0.35)] transition"
+                >
+                  加入等待名單
+                </button>
+                {waitlistSubmitted && (
+                  <p className="text-xs text-emerald-300">已收到申請，我們會依序開通 Beta。</p>
+                )}
+                {gateError && (
+                  <p className="text-xs text-red-300">{gateError}</p>
+                )}
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 };
