@@ -167,11 +167,11 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ data, onNodeClick, isLoading,
       .attr("dy", (d) => d.role === 'Core' ? 26 : 22)
       .attr("text-anchor", "middle")
       .text((d) => d.name)
-      .attr("fill", "#334155")
+      .attr("fill", "#e2e8f0")
       .attr("font-size", "10px")
       .attr("font-weight", "600")
       .style("pointer-events", "none")
-      .style("text-shadow", "0 1px 2px rgba(255,255,255,0.9)");
+      .style("text-shadow", "0 1px 2px rgba(0,0,0,0.8)");
 
     // Interactions
     node.on("mouseover", (event, d) => {
@@ -415,7 +415,7 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ data, onNodeClick, isLoading,
   };
 
   return (
-    <div ref={containerRef} className="w-full h-full bg-white relative overflow-hidden select-none">
+    <div ref={containerRef} className="w-full h-full bg-[#050b15] relative overflow-hidden select-none">
       
       {/* Live Activity Terminal Overlay (Bottom Left) */}
             {isLoading && (
@@ -447,8 +447,8 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ data, onNodeClick, isLoading,
       {/* Legend Overlay - Moved to Top Left */}
       {data && (
         <>
-            <div className="absolute top-4 left-4 bg-white/95 p-3 rounded-lg shadow-md border border-gray-200 text-xs backdrop-blur-sm z-10">
-            <p className="font-bold mb-2 text-gray-800 uppercase tracking-wider text-[10px]">Node Roles</p>
+            <div className="absolute top-4 left-4 bg-white/5 p-3 rounded-lg shadow-md border border-white/10 text-xs backdrop-blur-md z-10">
+            <p className="font-bold mb-2 text-gray-200 uppercase tracking-wider text-[10px]">Node Roles</p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
                 {Object.entries(NODE_COLORS).map(([role, color]) => {
                   const isActive = selectedNodeRole === role;
@@ -458,8 +458,8 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ data, onNodeClick, isLoading,
                         key={role} 
                         className={`
                             flex items-center gap-2 cursor-pointer p-1 rounded transition-all duration-200
-                            ${isActive ? 'bg-blue-50 ring-1 ring-blue-200 scale-105' : ''}
-                            ${!isActive && isHovered ? 'bg-gray-50 scale-105' : ''}
+                            ${isActive ? 'bg-white/10 ring-1 ring-cyan-300/50 scale-105' : ''}
+                            ${!isActive && isHovered ? 'bg-white/5 scale-105' : ''}
                         `}
                         onMouseEnter={() => setHoveredNodeRole(role)}
                         onMouseLeave={() => setHoveredNodeRole(null)}
@@ -469,13 +469,13 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ data, onNodeClick, isLoading,
                             className={`w-2.5 h-2.5 rounded-full shadow-sm transition-all ${isActive || isHovered ? 'w-3.5 h-3.5' : ''}`} 
                             style={{ backgroundColor: color }}
                         ></span>
-                        <span className={`text-gray-600 ${isActive || isHovered ? 'font-semibold text-gray-900' : ''}`}>{role}</span>
+                        <span className={`text-gray-300 ${isActive || isHovered ? 'font-semibold text-white' : ''}`}>{role}</span>
                     </div>
                   );
                 })}
             </div>
-            <div className="mt-3 pt-3 border-t border-gray-100">
-                <p className="font-bold mb-2 text-gray-800 uppercase tracking-wider text-[10px]">Relationship Types</p>
+            <div className="mt-3 pt-3 border-t border-white/10">
+                <p className="font-bold mb-2 text-gray-200 uppercase tracking-wider text-[10px]">Relationship Types</p>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
                     {Object.entries(LINK_COLORS).map(([type, color]) => {
                         const isActive = selectedLinkType === type;
@@ -486,8 +486,8 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ data, onNodeClick, isLoading,
                                 key={type} 
                                 className={`
                                     flex items-center gap-2 cursor-pointer p-1 rounded transition-all duration-200
-                                    ${isActive ? 'bg-blue-50 ring-1 ring-blue-200 scale-105' : ''}
-                                    ${!isActive && isHovered ? 'bg-gray-50 scale-105' : ''}
+                                    ${isActive ? 'bg-white/10 ring-1 ring-cyan-300/50 scale-105' : ''}
+                                    ${!isActive && isHovered ? 'bg-white/5 scale-105' : ''}
                                 `}
                                 onMouseEnter={() => setHoveredLinkType(type)}
                                 onMouseLeave={() => setHoveredLinkType(null)}
@@ -497,7 +497,7 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ data, onNodeClick, isLoading,
                                     className={`w-3 h-0.5 rounded-full shadow-sm transition-all ${isActive || isHovered ? 'w-4 h-1' : ''}`} 
                                     style={{ backgroundColor: color }}
                                 ></span>
-                                <span className={`text-gray-600 truncate max-w-[80px] ${isActive || isHovered ? 'font-semibold text-gray-900' : ''}`}>
+                                <span className={`text-gray-300 truncate max-w-[80px] ${isActive || isHovered ? 'font-semibold text-white' : ''}`}>
                                     {type}
                                 </span>
                             </div>
@@ -505,7 +505,7 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ data, onNodeClick, isLoading,
                     })}
                 </div>
                 {(hoveredLinkType || selectedLinkType || hoveredNodeRole || selectedNodeRole) && (
-                    <div className="mt-2 text-[10px] text-blue-500 text-center animate-fade-in">
+                    <div className="mt-2 text-[10px] text-cyan-300 text-center animate-fade-in">
                         {hoveredLinkType || hoveredNodeRole ? 'Viewing ' : 'Filtering: '} 
                         <span className="font-bold">
                             {hoveredNodeRole || selectedNodeRole || hoveredLinkType || selectedLinkType}
@@ -520,14 +520,14 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ data, onNodeClick, isLoading,
             <div className="absolute top-4 right-4 flex gap-2 z-10">
                 <button 
                     onClick={handleExportPNG}
-                    className="bg-white hover:bg-gray-50 text-gray-700 p-2 rounded-lg shadow border border-gray-200 text-xs font-medium transition-all"
+                    className="bg-white/10 hover:bg-white/20 text-white p-2 rounded-lg shadow border border-white/10 text-xs font-medium transition-all backdrop-blur-md"
                     title="Download PNG"
                 >
                     📷 PNG
                 </button>
                 <button 
                     onClick={handleExportJSON}
-                    className="bg-white hover:bg-gray-50 text-gray-700 p-2 rounded-lg shadow border border-gray-200 text-xs font-medium transition-all"
+                    className="bg-white/10 hover:bg-white/20 text-white p-2 rounded-lg shadow border border-white/10 text-xs font-medium transition-all backdrop-blur-md"
                     title="Download JSON"
                 >
                     💾 JSON

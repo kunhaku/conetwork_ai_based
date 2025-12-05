@@ -69,64 +69,64 @@ const InputPanel: React.FC<InputPanelProps> = ({ onGenerate, status, externalTop
   const hasTopic = topic.trim().length > 0;
 
   return (
-    <div className="flex flex-col h-full bg-white border-r border-gray-200 p-6 shadow-xl z-20 w-80 flex-shrink-0">
+    <div className="flex flex-col h-full bg-white/5 backdrop-blur-xl border-r border-white/10 p-6 shadow-[0_10px_40px_rgba(0,0,0,0.35)] z-20 w-80 flex-shrink-0 text-gray-100">
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-          <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center text-white text-sm font-serif shadow-blue-200 shadow-lg">N</div>
-          NexusGraph
+        <h1 className="text-xl font-bold text-white flex items-center gap-2">
+          <div className="w-7 h-7 bg-white text-black rounded-lg flex items-center justify-center text-sm font-serif shadow-white/40 shadow-lg">N</div>
+          <span className="tracking-[0.08em] uppercase">NexusGraph</span>
         </h1>
-        <p className="text-xs text-gray-500 mt-1 pl-9">AI-Powered Market Intelligence</p>
+        <p className="text-xs text-gray-400 mt-1 pl-9">AI-Powered Market Intelligence</p>
         {llmLabel && (
-          <p className="text-[10px] text-blue-600 mt-1 pl-9">LLM: {llmLabel}</p>
+          <p className="text-[10px] text-cyan-300 mt-1 pl-9">LLM: {llmLabel}</p>
         )}
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5 flex-1">
         <div>
           <div className="flex justify-between items-center mb-2">
-            <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">Seed Companies</label>
+            <label className="block text-xs font-bold uppercase tracking-wider text-gray-300">Seed Companies</label>
             {!seedArrayLength && hasTopic && (
-                 <span className="text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-100 font-medium">Auto-detect</span>
+                 <span className="text-[10px] text-emerald-300/90 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-400/30 font-medium">Auto-detect</span>
             )}
             {!seedArrayLength && !hasTopic && (
-                 <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">Optional if Topic set</span>
+                 <span className="text-[10px] text-gray-400 bg-white/5 px-1.5 py-0.5 rounded border border-white/10">Optional if Topic set</span>
             )}
           </div>
           <textarea
-            className={`w-full h-24 p-3 text-sm text-gray-900 border border-gray-200 bg-gray-50 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none transition-all font-mono shadow-inner placeholder-gray-400 ${externalSeeds ? 'border-green-300 bg-green-50 text-green-800' : ''}`}
+            className={`w-full h-24 p-3 text-sm text-gray-100 border border-white/10 bg-white/5 rounded-lg focus:bg-black/40 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-400 outline-none resize-none transition-all font-mono shadow-inner shadow-black/20 placeholder-gray-500 ${externalSeeds ? 'border-emerald-300/60 bg-emerald-500/10 text-emerald-100' : ''}`}
             placeholder={hasTopic ? "Leave empty to infer from Topic" : "One company per line..."}
             value={seeds}
             onChange={(e) => setSeeds(e.target.value)}
             disabled={isLoading}
           />
            {externalSeeds && (
-              <p className="text-[10px] text-green-600 mt-1 flex items-center gap-1 animate-fade-in">
-                  <span>✨</span> Auto-detected from topic
+              <p className="text-[10px] text-emerald-300 mt-1 flex items-center gap-1 animate-fade-in">
+                  <span className="text-emerald-200">✓</span> Auto-detected from topic
               </p>
           )}
         </div>
 
         <div>
           <div className="flex justify-between items-center mb-2">
-            <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">Research Topic</label>
+            <label className="block text-xs font-bold uppercase tracking-wider text-gray-300">Research Topic</label>
             {!hasTopic && seedArrayLength > 0 && (
-                <span className="text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-100 font-medium">Auto-detect</span>
+                <span className="text-[10px] text-emerald-300/90 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-400/30 font-medium">Auto-detect</span>
             )}
              {!hasTopic && seedArrayLength === 0 && (
-                <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">Optional if Seeds set</span>
+                <span className="text-[10px] text-gray-400 bg-white/5 px-1.5 py-0.5 rounded border border-white/10">Optional if Seeds set</span>
             )}
           </div>
           <input
             type="text"
-            className={`w-full p-3 text-sm text-gray-900 border border-gray-200 bg-gray-50 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-inner placeholder-gray-400 ${externalTopic ? 'border-green-300 bg-green-50 text-green-800' : ''}`}
+            className={`w-full p-3 text-sm text-gray-100 border border-white/10 bg-white/5 rounded-lg focus:bg-black/40 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-400 outline-none transition-all shadow-inner shadow-black/20 placeholder-gray-500 ${externalTopic ? 'border-emerald-300/60 bg-emerald-500/10 text-emerald-100' : ''}`}
             placeholder={seedArrayLength > 0 ? "Leave empty to infer from Seeds" : "e.g. AI GPU Supply Chain"}
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
             disabled={isLoading}
           />
           {externalTopic && (
-              <p className="text-[10px] text-green-600 mt-1 flex items-center gap-1 animate-fade-in">
-                  <span>✨</span> Auto-detected from seeds
+              <p className="text-[10px] text-emerald-300 mt-1 flex items-center gap-1 animate-fade-in">
+                  <span className="text-emerald-200">✓</span> Auto-detected from seeds
               </p>
           )}
         </div>
@@ -136,8 +136,8 @@ const InputPanel: React.FC<InputPanelProps> = ({ onGenerate, status, externalTop
           disabled={isLoading || (seedArrayLength === 0 && !hasTopic)}
           className={`w-full py-3 px-4 rounded-lg text-white font-semibold text-sm transition-all shadow-md flex items-center justify-center gap-2
             ${isLoading || (seedArrayLength === 0 && !hasTopic)
-              ? 'bg-blue-300 cursor-not-allowed shadow-none text-blue-100' 
-              : 'bg-blue-600 hover:bg-blue-700 hover:shadow-lg active:translate-y-0.5'
+              ? 'bg-cyan-400/50 cursor-not-allowed shadow-none text-cyan-100' 
+              : 'bg-white text-black hover:translate-y-[-1px] hover:shadow-[0_10px_30px_rgba(0,0,0,0.35)] active:translate-y-0'
             }`}
         >
           {isLoading ? 'Researching...' : 'Generate Graph'}
@@ -145,7 +145,7 @@ const InputPanel: React.FC<InputPanelProps> = ({ onGenerate, status, externalTop
 
         {/* Pipeline Stepper */}
         <div className="mt-4 flex-1 overflow-y-auto">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-100 pb-2">Analysis Pipeline</h3>
+            <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider mb-4 border-b border-white/10 pb-2">Analysis Pipeline</h3>
             <div className="space-y-4">
                 {STEPS.map((step, idx) => {
                     const state = getStepState(step.id as PipelineStage);
@@ -154,9 +154,9 @@ const InputPanel: React.FC<InputPanelProps> = ({ onGenerate, status, externalTop
                             {/* Icon */}
                             <div className={`
                                 w-6 h-6 rounded-full flex items-center justify-center text-[10px] border flex-shrink-0 transition-colors duration-300
-                                ${state === 'complete' ? 'bg-green-500 border-green-500 text-white' : ''}
-                                ${state === 'active' ? 'bg-blue-600 border-blue-600 text-white animate-pulse' : ''}
-                                ${state === 'pending' ? 'bg-white border-gray-200 text-gray-300' : ''}
+                                ${state === 'complete' ? 'bg-emerald-500 border-emerald-500 text-white' : ''}
+                                ${state === 'active' ? 'bg-cyan-500 border-cyan-500 text-white animate-pulse' : ''}
+                                ${state === 'pending' ? 'bg-white/5 border-white/10 text-gray-500' : ''}
                                 ${state === 'error' ? 'bg-red-500 border-red-500 text-white' : ''}
                             `}>
                                 {state === 'complete' ? '✓' : idx + 1}
@@ -164,7 +164,7 @@ const InputPanel: React.FC<InputPanelProps> = ({ onGenerate, status, externalTop
                             
                             {/* Text */}
                             <div className="flex-1 -mt-0.5">
-                                <p className={`text-xs font-semibold transition-colors duration-300 ${state === 'active' ? 'text-blue-700' : state === 'complete' ? 'text-gray-900' : 'text-gray-400'}`}>
+                                <p className={`text-xs font-semibold transition-colors duration-300 ${state === 'active' ? 'text-cyan-200' : state === 'complete' ? 'text-gray-100' : 'text-gray-500'}`}>
                                     {step.label}
                                 </p>
                                 <p className="text-[10px] text-gray-400 leading-tight">{step.desc}</p>
@@ -177,7 +177,7 @@ const InputPanel: React.FC<InputPanelProps> = ({ onGenerate, status, externalTop
       </form>
       
       {/* Footer Status */}
-      <div className="mt-4 pt-4 border-t border-gray-100">
+      <div className="mt-4 pt-4 border-t border-white/10">
          <p className="text-[10px] text-gray-400 font-mono h-4 truncate">
             {isLoading ? `> ${status.message}` : status.stage === 'complete' ? '> Analysis Complete' : '> Ready'}
          </p>

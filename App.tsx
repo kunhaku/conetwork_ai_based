@@ -90,7 +90,7 @@ const App: React.FC = () => {
   }, [viewMode]);
 
   return (
-    <div className="flex h-screen w-screen bg-gray-50 overflow-hidden text-gray-900 font-sans">
+    <div className="flex h-screen w-screen bg-gradient-to-br from-[#050b15] via-[#0b1324] to-[#020617] overflow-hidden text-gray-100 font-sans">
       {/* 1. Left Input Sidebar */}
       <InputPanel 
         onGenerate={handleGenerate} 
@@ -101,20 +101,20 @@ const App: React.FC = () => {
       />
 
       {/* 2. Middle Content Area */}
-      <div className="flex-1 flex flex-col relative border-r border-gray-200 overflow-hidden">
+      <div className="flex-1 flex flex-col relative border-r border-white/10 overflow-hidden">
         
         {/* View Toggles (Only visible when data exists) */}
         {graphData && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-white/90 backdrop-blur shadow-sm border border-gray-200 rounded-full p-1 flex gap-1">
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-white/10 backdrop-blur-md shadow-sm border border-white/10 rounded-full p-1 flex gap-1">
                 <button 
                     onClick={() => setViewMode('graph')}
-                    className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${viewMode === 'graph' ? 'bg-blue-600 text-white shadow' : 'text-gray-500 hover:bg-gray-100'}`}
+                    className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${viewMode === 'graph' ? 'bg-white text-black shadow' : 'text-gray-300 hover:bg-white/10'}`}
                 >
                     Graph View
                 </button>
                 <button 
                     onClick={() => setViewMode('report')}
-                    className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${viewMode === 'report' ? 'bg-blue-600 text-white shadow' : 'text-gray-500 hover:bg-gray-100'}`}
+                    className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${viewMode === 'report' ? 'bg-white text-black shadow' : 'text-gray-300 hover:bg-white/10'}`}
                 >
                     Agent R Report
                 </button>
@@ -123,9 +123,9 @@ const App: React.FC = () => {
 
         {/* Error Banner */}
         {status.stage === 'error' && (
-            <div className="absolute top-16 left-4 right-4 z-50 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg shadow-sm flex items-center justify-between">
+            <div className="absolute top-16 left-4 right-4 z-50 bg-red-500/10 border border-red-400/50 text-red-100 px-4 py-3 rounded-lg shadow-sm flex items-center justify-between backdrop-blur">
                 <span>Error: {status.message}</span>
-                <button onClick={() => setStatus({ stage: 'idle', message: '', progress: 0 })} className="text-red-500 font-bold">&times;</button>
+                <button onClick={() => setStatus({ stage: 'idle', message: '', progress: 0 })} className="text-red-200 font-bold">&times;</button>
             </div>
         )}
 
