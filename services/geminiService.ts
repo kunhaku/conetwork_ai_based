@@ -13,6 +13,8 @@ import { callLLM } from "./llmClient";
 type ChatOptions = { temperature?: number; model?: string };
 const FINANCE_API = import.meta.env.VITE_FINANCE_API || '/api/finance/quote';
 const DB_API = import.meta.env.VITE_DB_API || '/api/db/graph/upsert';
+const MIN_LINKS_S = 5;
+const MAX_ATTEMPTS_S = 3;
 const isValidHttpUrl = (url: any) => {
   if (typeof url !== 'string') return false;
   try {
@@ -144,6 +146,31 @@ const runAgentS = async (seed: string, topic: string, layer?: string): Promise<U
     console.error(`Agent S failed for ${seed}`, e);
     return null;
   }
+};
+
+const countValidLinks = (result: any) => {
+  const srcMap = new Set<number>();
+  (Array.isArray(result?.sources) ? result.sources : []).forEach((s: any) => {
+    if (s && typeof s.id === 'number' && isValidHttpUrl(s.url)) srcMap.add(s.id);
+  });
+  let count = 0;
+  (Array.isArray(result?.links) ? result.links : []).forEach((l: any) => {
+    if (!l || !l.source || !l.target || !l.type) return;
+    const ids = Array.isArray(l.sourceIds) ? l.sourceIds.filter((id: any) => srcMap.has(id)) : [];
+    if (ids.length > 0) count++;
+  });
+  return count;
+};
+
+const runAgentSWithRetry = async (seed: string, topic: string, layer?: string): Promise<UnifiedGraph | null> => {
+  let best: { result: UnifiedGraph | null; score: number } = { result: null, score: -1 };
+  for (let attempt = 0; attempt < MAX_ATTEMPTS_S; attempt++) {
+    const res = await runAgentS(seed, topic, layer);
+    const score = countValidLinks(res);
+    if (score > best.score) best = { result: res, score };
+    if (score >= MIN_LINKS_S) break;
+  }
+  return best.result;
 };
 
 // --- STAGE 1.5: AGENT Q (Quantitative Data via yfinance) ---
@@ -460,7 +487,7 @@ export const runPipeline = async (
   // --- STAGE 1: SEED ANALYSIS ---
   onStatus({ stage: 'agent-s', message: `Agent S: Analyzing seeds for '${topic}'...`, progress: 10 });
   
-  const seedResults = await Promise.all(seeds.map(seed => runAgentS(seed, topic, seedLayerMap.get(normalizeId(seed)))));
+  const seedResults = await Promise.all(seeds.map(seed => runAgentSWithRetry(seed, topic, seedLayerMap.get(normalizeId(seed)))));
   
   seedResults.forEach(result => {
     if (!result) return;
