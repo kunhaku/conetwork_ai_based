@@ -137,7 +137,7 @@ const InputPanel: React.FC<InputPanelProps> = ({ onGenerate, status, externalTop
           className={`w-full py-3 px-4 rounded-lg text-white font-semibold text-sm transition-all shadow-md flex items-center justify-center gap-2
             ${isLoading || (seedArrayLength === 0 && !hasTopic)
               ? 'bg-cyan-400/50 cursor-not-allowed shadow-none text-cyan-100' 
-              : 'bg-white text-black hover:translate-y-[-1px] hover:shadow-[0_10px_30px_rgba(0,0,0,0.35)] active:translate-y-0'
+              : 'bg-cyan-500 text-white hover:bg-cyan-400 hover:translate-y-[-1px] hover:shadow-[0_10px_30px_rgba(0,0,0,0.35)] active:translate-y-0'
             }`}
         >
           {isLoading ? 'Researching...' : 'Generate Graph'}
