@@ -21,8 +21,8 @@ export const HeroOverlay: React.FC = () => {
         </h1>
 
         <p className="max-w-2xl mx-auto text-lg md:text-xl font-light text-gray-400 leading-relaxed">
-          Agent S/Q/X/F/R auto-infers seeds, financials, cross-links, qualitative risks, and a strategic report.
-          Launch the graph app or view the live demo area below.
+          Built for analysts and investors. Turn hours of company research into a real-time knowledge graph as
+          role-based agents auto-infer relationships, financials, and risks.
         </p>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-8">
