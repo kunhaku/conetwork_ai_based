@@ -5,14 +5,14 @@ import * as THREE from 'three';
 
 const CONFIG = {
   INITIAL_PARTICLES: 50,
-  MAX_PARTICLES: 200,
+  MAX_PARTICLES: 150,
   PARTICLE_BASE_SIZE: 0.2,
   CORE_NODE_SIZE: 4.0,
-  SPHERE_RADIUS: 11.0,
+  SPHERE_RADIUS: 10.12, // 8% smaller
   EXPLOSION_FORCE: 0.8,
   CONNECTION_DISTANCE: 6.0,
   IDEAL_LINK_LENGTH: 4.4,
-  REPULSION_RADIUS: 2.3,
+  REPULSION_RADIUS: 2.6,
   BRIGHTNESS: 0.75,
 };
 
@@ -148,11 +148,13 @@ const GraphScene: React.FC = () => {
         if (currentDist > 0.01) {
           const dir = pos.clone().normalize();
           const targetPos = dir.multiplyScalar(CONFIG.SPHERE_RADIUS);
-          const force = targetPos.sub(pos).multiplyScalar(0.08);
+          const force = targetPos.sub(pos).multiplyScalar(0.045);
           vel.add(force);
         }
 
-        for (let j = 0; j < s.count; j++) {
+        const sampleNeighbors = 20;
+        for (let n = 0; n < sampleNeighbors; n++) {
+          const j = Math.floor(Math.random() * s.count);
           if (i === j) continue;
           const j3 = j * 3;
           const dx = pos.x - s.positions[j3];
@@ -164,7 +166,7 @@ const GraphScene: React.FC = () => {
 
           if (dSq < minDist * minDist && dSq > 0.001) {
             const d = Math.sqrt(dSq);
-            const force = (minDist - d) * 0.03;
+            const force = (minDist - d) * 0.012;
             vel.x += (dx / d) * force;
             vel.y += (dy / d) * force;
             vel.z += (dz / d) * force;
@@ -172,13 +174,17 @@ const GraphScene: React.FC = () => {
         }
 
         const noise = new THREE.Vector3(
-          Math.sin(time * 1.5 + i) * 0.004,
-          Math.cos(time * 1.2 + i * 2) * 0.004,
-          Math.sin(time * 0.8 + i * 0.5) * 0.004
+          Math.sin(time * 1.5 + i) * 0.002,
+          Math.cos(time * 1.2 + i * 2) * 0.002,
+          Math.sin(time * 0.8 + i * 0.5) * 0.002
         );
         vel.add(noise);
 
-        vel.multiplyScalar(0.92);
+        vel.multiplyScalar(0.9);
+        const maxVel = 0.6;
+        if (vel.length() > maxVel) {
+          vel.setLength(maxVel);
+        }
       }
 
       pos.add(vel);
@@ -223,7 +229,7 @@ const GraphScene: React.FC = () => {
       meshRef.current.instanceMatrix.needsUpdate = true;
     }
 
-    if (ctx.gl.info.render.frame % 3 === 0) {
+    if (ctx.gl.info.render.frame % 6 === 0) {
       const newConnections: number[] = [];
       const maxConn = 5;
       const connCounts = new Int32Array(s.count).fill(0);
