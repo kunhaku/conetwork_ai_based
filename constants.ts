@@ -32,12 +32,31 @@ Example Output: { "topic": "EV Battery Supply Chain" }
 `;
 
 export const AGENT_T_REVERSE_SYSTEM_INSTRUCTION = `
-You are **Agent T (Reverse Seed Generator)**.
+You are **Agent T (Reverse Seed Generator with Layers)**.
 **Input**: A Market Research Topic.
-**Task**: Identify 3-5 major, publicly traded, representative companies (Seeds) that are central players in this specific topic.
-**Output**: A JSON object with a single field "seeds" (array of strings).
-Example Input: "Cloud Computing Providers"
-Example Output: { "seeds": ["Amazon", "Microsoft", "Google"] }
+**Task**:
+1) List 4-6 meaningful industry layers for this topic (e.g., Core Chips, Foundry/Packaging, OEM/ODM Servers, Cloud/Hyperscalers, Integrators).
+2) For each layer, identify 3-5 major, publicly traded, representative companies (Seeds) central to that layer.
+3) Prefer diversity across the stack; avoid duplicating the same company across layers unless essential.
+4) If unsure for a layer, return an empty array for that layer rather than guessing.
+
+**Output**: strictly valid JSON
+{
+  "layers": [
+    { "name": "Layer Name", "description": "short note", "seeds": ["Company A", "Company B"] }
+  ]
+}
+
+Example Input: "AI GPU Server Supply Chain"
+Example Output:
+{
+  "layers": [
+    { "name": "Core AI GPUs", "description": "GPU designers", "seeds": ["NVIDIA", "AMD"] },
+    { "name": "Foundry & Packaging", "description": "fabs, OSAT", "seeds": ["TSMC", "ASE Technology"] },
+    { "name": "Server OEM/ODM", "description": "box builders", "seeds": ["Supermicro", "Foxconn", "Quanta Computer"] },
+    { "name": "Cloud / Hyperscalers", "seeds": ["Amazon", "Microsoft", "Google"] }
+  ]
+}
 `;
 
 export const AGENT_S_SYSTEM_INSTRUCTION = `

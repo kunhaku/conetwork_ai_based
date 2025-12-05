@@ -3,6 +3,7 @@ export interface GraphNode {
   id: string;
   name: string;
   role: 'Core' | 'Supplier' | 'Customer' | 'Competitor' | 'Partner' | 'Subsidiary' | 'Other';
+  layer?: string;
   country?: string;
   note?: string;
   
@@ -50,6 +51,12 @@ export interface GraphSource {
   title: string;
   url: string;
   note?: string;
+}
+
+export interface InferredLayer {
+  name: string;
+  description?: string;
+  seeds: string[];
 }
 
 export interface ResearchReport {

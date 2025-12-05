@@ -1,4 +1,4 @@
-import { UnifiedGraph, AnalysisRequest, GraphNode, GraphLink, GraphSource, ResearchReport, PipelineStatus } from "../types";
+import { UnifiedGraph, AnalysisRequest, GraphNode, GraphLink, GraphSource, ResearchReport, PipelineStatus, InferredLayer } from "../types";
 import { 
     AGENT_S_SYSTEM_INSTRUCTION, 
     AGENT_Q_SYSTEM_INSTRUCTION, 
@@ -99,8 +99,8 @@ const inferTopic = async (seeds: string[]): Promise<string | null> => {
     }
 };
 
-// --- STAGE 0: AGENT T (Reverse - Seeds Inference) ---
-const inferSeeds = async (topic: string): Promise<string[]> => {
+// --- STAGE 0: AGENT T (Reverse - Layered Seeds Inference) ---
+const inferLayers = async (topic: string): Promise<InferredLayer[]> => {
     try {
         const response = await callPuterChat(
           AGENT_T_REVERSE_SYSTEM_INSTRUCTION,
@@ -108,19 +108,26 @@ const inferSeeds = async (topic: string): Promise<string[]> => {
           { temperature: 0.3 }
         );
         const result = safeParseJSON(response || "");
-        return result?.seeds || [];
+        if (!result?.layers || !Array.isArray(result.layers)) return [];
+        return result.layers
+          .filter((l: any) => l?.name && Array.isArray(l?.seeds))
+          .map((l: any) => ({
+            name: String(l.name),
+            description: typeof l.description === 'string' ? l.description : undefined,
+            seeds: (l.seeds || []).map((s: any) => String(s)).filter(Boolean)
+          }));
     } catch (e) {
-        console.error("Agent T (Reverse) failed", e);
+        console.error("Agent T (Reverse layers) failed", e);
         return [];
     }
 };
 
 // --- STAGE 1: AGENT S (Seed Analysis) ---
-const runAgentS = async (seed: string, topic: string): Promise<UnifiedGraph | null> => {
+const runAgentS = async (seed: string, topic: string, layer?: string): Promise<UnifiedGraph | null> => {
   try {
     const response = await callPuterChat(
       AGENT_S_SYSTEM_INSTRUCTION,
-      JSON.stringify({ seed, topic }),
+      JSON.stringify({ seed, topic, layer }),
       { temperature: 0.1 }
     );
     return safeParseJSON(response || "");
@@ -269,6 +276,7 @@ export const runPipeline = async (
   let { seeds, topic } = request;
   // Normalize and de-duplicate seeds up front to avoid duplicate Core nodes
   const seedSet = new Set<string>();
+  const seedLayerMap = new Map<string, string>();
   seeds = seeds
     .map(s => s.trim())
     .filter(s => s.length > 0 && !isGenericName(s))
@@ -294,27 +302,30 @@ export const runPipeline = async (
 
   // CASE B: Topic exists, Seeds missing -> Infer Seeds
   if ((!seeds || seeds.length === 0) && topic && topic.trim() !== "") {
-       onStatus({ stage: 'agent-s', message: `Agent T: Inferring key players for '${topic}'...`, progress: 2 });
-       const inferredSeeds = await inferSeeds(topic);
-       if (inferredSeeds && inferredSeeds.length > 0) {
-           // normalize inferred seeds
-           const inferredSet = new Set<string>();
-           seeds = inferredSeeds
-             .map(s => s.trim())
-             .filter(s => s.length > 0 && !isGenericName(s))
-             .filter(s => {
-               const cid = normalizeId(s);
-               if (!cid || inferredSet.has(cid)) return false;
-               inferredSet.add(cid);
-               return true;
-             });
+       onStatus({ stage: 'agent-s', message: `Agent T: Mapping layers & key players for '${topic}'...`, progress: 2 });
+       const layers = await inferLayers(topic);
+
+       const inferredSeeds: string[] = [];
+       const inferredSet = new Set<string>();
+
+       layers.forEach(layer => {
+         (layer.seeds || []).forEach(seed => {
+           const trimmed = seed.trim();
+           const cid = normalizeId(trimmed);
+           if (!trimmed || !cid || inferredSet.has(cid) || isGenericName(trimmed)) return;
+           inferredSet.add(cid);
+           inferredSeeds.push(trimmed);
+           seedLayerMap.set(cid, layer.name);
+         });
+       });
+
+       if (inferredSeeds.length > 0) {
+           seeds = inferredSeeds;
            seedSet.clear();
            seeds.forEach(s => seedSet.add(normalizeId(s)));
            if (onSeedsInferred) onSeedsInferred(seeds);
        } else {
-           // Fallback creates a graph about the topic generally? 
-           // Agent S needs a seed. If this fails, we effectively fail.
-           throw new Error("Could not infer seed companies from topic. Please provide at least one seed company.");
+           throw new Error("Could not infer layered seeds from topic. Please provide at least one seed company.");
        }
   }
 
@@ -349,7 +360,7 @@ export const runPipeline = async (
       // preserve Core if any source is Core
       if (node.role === 'Core' || existing.role === 'Core') existing.role = 'Core';
       // merge scalar fields if missing
-      const fields: (keyof GraphNode)[] = ['ticker','primaryExchange','sector','industry','sizeBucket','growthProfile','riskNotes','latestPrice','marketCap','revenue','netIncome','country','note'];
+      const fields: (keyof GraphNode)[] = ['ticker','primaryExchange','sector','industry','sizeBucket','growthProfile','riskNotes','latestPrice','marketCap','revenue','netIncome','country','note','layer'];
       fields.forEach(f => {
         const val = (existing as any)[f];
         const incoming = (node as any)[f];
@@ -401,7 +412,7 @@ export const runPipeline = async (
   // --- STAGE 1: SEED ANALYSIS ---
   onStatus({ stage: 'agent-s', message: `Agent S: Analyzing seeds for '${topic}'...`, progress: 10 });
   
-  const seedResults = await Promise.all(seeds.map(seed => runAgentS(seed, topic)));
+  const seedResults = await Promise.all(seeds.map(seed => runAgentS(seed, topic, seedLayerMap.get(normalizeId(seed)))));
   
   seedResults.forEach(result => {
     if (!result) return;
@@ -411,6 +422,8 @@ export const runPipeline = async (
         const isSeed = seedSet.has(normalizeId(node.name)) || seedSet.has(normalizeId(node.id));
         if (isSeed) {
             node.role = 'Core';
+            const layerName = seedLayerMap.get(normalizeId(node.name)) || seedLayerMap.get(normalizeId(node.id));
+            if (layerName) node.layer = layerName;
         }
 
         const merged = mergeNode(node);
