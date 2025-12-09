@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { NavBar } from './components/landing/NavBar';
 import { ClusterGraph3D } from './components/landing/ClusterGraph3D';
 import { HeroOverlay } from './components/landing/HeroOverlay';
+import DemoBox from './components/landing/DemoBox';
 
 const pipeline = [
   { title: 'Evidence Intake', desc: 'Collect recent news, IR/press, SEC, Wiki; keep reachable URLs only.' },
@@ -114,25 +115,10 @@ export const LandingPage: React.FC = () => {
                   <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Live demo dock</p>
                   <h3 className="text-2xl font-bold">Show the product in action</h3>
                 </div>
-                <span className="text-[10px] text-gray-400 border border-white/10 rounded-full px-3 py-1">TODO</span>
+                <span className="text-[10px] text-emerald-300 border border-emerald-300/40 rounded-full px-3 py-1 bg-emerald-500/10">Demo</span>
               </div>
-              <div className="flex-1 min-h-[320px] rounded-xl border border-dashed border-white/15 bg-black/40 p-4 text-gray-500 text-sm">
-                <table className="w-full h-full text-left text-xs text-gray-500">
-                  <tbody>
-                    <tr className="border-b border-white/10">
-                      <td className="py-3">Web animation slot</td>
-                      <td className="py-3 text-right text-gray-400">TODO</td>
-                    </tr>
-                    <tr className="border-b border-white/10">
-                      <td className="py-3">Interaction notes</td>
-                      <td className="py-3 text-right text-gray-400">TODO</td>
-                    </tr>
-                    <tr>
-                      <td className="py-3">Embed status</td>
-                      <td className="py-3 text-right text-gray-400">TODO</td>
-                    </tr>
-                  </tbody>
-                </table>
+              <div className="flex-1 min-h-[320px] rounded-xl border border-white/10 bg-black/40 p-4 text-gray-100 text-sm">
+                <DemoBox />
               </div>
             </div>
           </div>
