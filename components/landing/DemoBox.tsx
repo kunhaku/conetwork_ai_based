@@ -1,27 +1,43 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
-type DemoNode = { id: string; name: string; role: string };
-type DemoLink = { source: string; target: string };
+type DemoNode = { id: string; name: string; role: 'Core' | 'Supplier' | 'Customer' | 'Competitor' | 'Partner' | 'Subsidiary' | 'Other' };
+type DemoLink = { source: string; target: string; type: 'SupplyChain' | 'Equity' | 'Competitor' | 'Partner' | 'Acquisition' | 'Customer' };
 
 const demoNodes: DemoNode[] = [
   { id: 'NVIDIA', name: 'NVIDIA', role: 'Core' },
-  { id: 'TSMC', name: 'TSMC', role: 'Supplier' },
-  { id: 'ASML', name: 'ASML', role: 'Supplier' },
-  { id: 'Supermicro', name: 'Supermicro', role: 'OEM' },
-  { id: 'AWS', name: 'AWS', role: 'Customer' },
-  { id: 'GCP', name: 'Google Cloud', role: 'Customer' },
-  { id: 'Samsung', name: 'Samsung Foundry', role: 'Supplier' },
+  { id: 'TSMC', name: 'TSMC', role: 'Core' },
+  { id: 'Samsung', name: 'Samsung Electronics', role: 'Competitor' },
+  { id: 'Intel', name: 'Intel', role: 'Competitor' },
+  { id: 'AMD', name: 'AMD', role: 'Competitor' },
+  { id: 'Foxconn', name: 'Foxconn', role: 'Supplier' },
+  { id: 'GlobalSemi', name: 'Global Semiconductor Industry', role: 'Supplier' },
+  { id: 'Dell', name: 'Dell Technologies', role: 'Customer' },
+  { id: 'HPE', name: 'Hewlett Packard Enterprise', role: 'Customer' },
+  { id: 'Supermicro', name: 'Super Micro Computer', role: 'Customer' },
+  { id: 'Amazon', name: 'Amazon', role: 'Customer' },
+  { id: 'Google', name: 'Google', role: 'Customer' },
+  { id: 'Microsoft', name: 'Microsoft', role: 'Customer' },
+  { id: 'GlobalAI', name: 'Global AI Market', role: 'Other' },
 ];
 
 const demoLinks: DemoLink[] = [
-  { source: 'NVIDIA', target: 'TSMC' },
-  { source: 'NVIDIA', target: 'ASML' },
-  { source: 'NVIDIA', target: 'Supermicro' },
-  { source: 'NVIDIA', target: 'Samsung' },
-  { source: 'Supermicro', target: 'AWS' },
-  { source: 'Supermicro', target: 'GCP' },
-  { source: 'NVIDIA', target: 'AWS' },
-  { source: 'NVIDIA', target: 'GCP' },
+  { source: 'NVIDIA', target: 'TSMC', type: 'SupplyChain' },
+  { source: 'TSMC', target: 'GlobalSemi', type: 'SupplyChain' },
+  { source: 'TSMC', target: 'Foxconn', type: 'SupplyChain' },
+  { source: 'TSMC', target: 'Intel', type: 'SupplyChain' },
+  { source: 'TSMC', target: 'Samsung', type: 'SupplyChain' },
+  { source: 'NVIDIA', target: 'Foxconn', type: 'SupplyChain' },
+  { source: 'NVIDIA', target: 'Dell', type: 'Customer' },
+  { source: 'NVIDIA', target: 'HPE', type: 'Customer' },
+  { source: 'NVIDIA', target: 'Supermicro', type: 'Customer' },
+  { source: 'NVIDIA', target: 'Amazon', type: 'Customer' },
+  { source: 'NVIDIA', target: 'Google', type: 'Customer' },
+  { source: 'NVIDIA', target: 'Microsoft', type: 'Customer' },
+  { source: 'NVIDIA', target: 'GlobalAI', type: 'Partner' },
+  { source: 'Intel', target: 'Dell', type: 'SupplyChain' },
+  { source: 'Samsung', target: 'Intel', type: 'Competitor' },
+  { source: 'NVIDIA', target: 'AMD', type: 'Competitor' },
+  { source: 'Google', target: 'Microsoft', type: 'Partner' },
 ];
 
 const roleColors: Record<string, string> = {
@@ -30,6 +46,18 @@ const roleColors: Record<string, string> = {
   OEM: '#a855f7',
   Customer: '#38bdf8',
   Other: '#94a3b8',
+  Competitor: '#f43f5e',
+  Partner: '#8b5cf6',
+  Subsidiary: '#ec4899',
+};
+
+const linkColors: Record<DemoLink['type'], string> = {
+  SupplyChain: '#f97316',
+  Equity: '#10b981',
+  Competitor: '#ef4444',
+  Partner: '#8b5cf6',
+  Acquisition: '#ec4899',
+  Customer: '#3b82f6',
 };
 
 const MiniGraph: React.FC<{
@@ -37,7 +65,8 @@ const MiniGraph: React.FC<{
   visibleNodes: string[];
   visibleLinks: DemoLink[];
   highlightId: string | null;
-}> = ({ nodes, visibleNodes, visibleLinks, highlightId }) => {
+  activeRole: string | null;
+}> = ({ nodes, visibleNodes, visibleLinks, highlightId, activeRole }) => {
   const positions = useMemo(() => {
     const centerX = 200;
     const centerY = 140;
@@ -64,31 +93,43 @@ const MiniGraph: React.FC<{
       </defs>
       {visibleLinks.map((link, idx) => {
         if (!isVisible(link.source) || !isVisible(link.target)) return null;
-        const src = positions[link.source];
-        const tgt = positions[link.target];
-        return (
-          <line
-            key={`${link.source}-${link.target}-${idx}`}
-            x1={src.x}
-            y1={src.y}
-            x2={tgt.x}
-            y2={tgt.y}
-            stroke="url(#edgeGradient)"
-            strokeWidth={2}
-            strokeOpacity={highlightId === `${link.source}-${link.target}` ? 0.9 : 0.4}
-          />
-        );
-      })}
-      {nodes.map((node) => {
-        const pos = positions[node.id];
-        const visible = isVisible(node.id);
-        const highlighted = highlightId === node.id;
-        return (
-          <g key={node.id} transform={`translate(${pos.x},${pos.y})`} opacity={visible ? 1 : 0} className="transition-all duration-300">
-            <circle
-              r={visible ? 12 : 0}
-              fill={roleColors[node.role] || roleColors.Other}
-              stroke="#0ea5e9"
+    const src = positions[link.source];
+    const tgt = positions[link.target];
+    const isFiltered =
+      activeRole &&
+      !(
+        nodes.find((n) => n.id === link.source && (n.role === activeRole || n.role === 'Core')) &&
+        nodes.find((n) => n.id === link.target && (n.role === activeRole || n.role === 'Core'))
+      );
+    return (
+      <line
+        key={`${link.source}-${link.target}-${idx}`}
+        x1={src.x}
+        y1={src.y}
+        x2={tgt.x}
+        y2={tgt.y}
+        stroke={linkColors[link.type]}
+        strokeWidth={2.5}
+        strokeOpacity={isFiltered ? 0.08 : highlightId === `${link.source}-${link.target}` ? 0.9 : 0.4}
+      />
+    );
+  })}
+  {nodes.map((node) => {
+    const pos = positions[node.id];
+    const visible = isVisible(node.id);
+    const highlighted = highlightId === node.id;
+    const filtered = activeRole && !(node.role === activeRole || node.role === 'Core');
+    return (
+      <g
+        key={node.id}
+        transform={`translate(${pos.x},${pos.y})`}
+        opacity={visible ? (filtered ? 0.2 : 1) : 0}
+        className="transition-all duration-300"
+      >
+        <circle
+          r={visible ? 12 : 0}
+          fill={roleColors[node.role] || roleColors.Other}
+          stroke="#0ea5e9"
               strokeWidth={highlighted ? 3 : 0}
               className={highlighted ? 'animate-pulse' : ''}
             />
@@ -117,6 +158,7 @@ const DemoBox: React.FC = () => {
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [status, setStatus] = useState('Idle');
   const [playing, setPlaying] = useState(false);
+  const [activeRole, setActiveRole] = useState<string | null>(null);
   const timers = useRef<number[]>([]);
 
   const clearTimers = () => {
@@ -133,6 +175,7 @@ const DemoBox: React.FC = () => {
     setVisibleNodes([]);
     setVisibleLinks([]);
     setHighlightId(null);
+    setActiveRole(null);
     setStatus('Reading inputs...');
 
     const nodeDelay = 500;
@@ -199,7 +242,32 @@ const DemoBox: React.FC = () => {
         <p className="text-xs text-gray-400">Status: {status}</p>
       </div>
       <div className="rounded-xl border border-white/10 bg-gradient-to-br from-slate-900/60 to-slate-800/40 p-2 min-h-[280px]">
-        <MiniGraph nodes={demoNodes} visibleNodes={visibleNodes} visibleLinks={visibleLinks} highlightId={highlightId} />
+        <MiniGraph
+          nodes={demoNodes}
+          visibleNodes={visibleNodes}
+          visibleLinks={visibleLinks}
+          highlightId={highlightId}
+          activeRole={activeRole}
+        />
+        <div className="flex flex-wrap gap-2 px-2 pb-2 mt-2">
+          {['Core', 'Supplier', 'Customer', 'Competitor', 'Partner', 'Subsidiary', 'Other'].map((role) => (
+            <button
+              key={role}
+              onMouseEnter={() => setActiveRole(role)}
+              onMouseLeave={() => setActiveRole(null)}
+              onClick={() => setActiveRole((prev) => (prev === role ? null : role))}
+              className={`px-2 py-1 rounded-full text-[10px] border ${
+                activeRole === role ? 'border-cyan-300 bg-cyan-500/20 text-white' : 'border-white/10 text-gray-300'
+              }`}
+            >
+              <span
+                className="inline-block w-2 h-2 rounded-full mr-2 align-middle"
+                style={{ backgroundColor: roleColors[role] || roleColors.Other }}
+              />
+              {role}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
