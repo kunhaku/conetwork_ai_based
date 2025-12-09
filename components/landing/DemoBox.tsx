@@ -86,9 +86,17 @@ const MiniGraph: React.FC<{
   activeRole: string | null;
 }> = ({ nodes, visibleNodes, visibleLinks, highlightId, activeRole }) => {
   const positions = useMemo(() => {
+    const centerX = 200;
+    const centerY = 200;
+    const scale = 1.3;
     return nodes.reduce<Record<string, { x: number; y: number }>>((acc, node) => {
-      const pos = layout[node.id] || { x: 200, y: 140 };
-      acc[node.id] = pos;
+      const base = layout[node.id] || { x: centerX, y: centerY };
+      const dx = base.x - centerX;
+      const dy = base.y - centerY;
+      acc[node.id] = {
+        x: centerX + dx * scale,
+        y: centerY + dy * scale,
+      };
       return acc;
     }, {});
   }, [nodes]);
