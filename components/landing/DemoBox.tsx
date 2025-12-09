@@ -82,24 +82,29 @@ const MiniGraph: React.FC<{
   nodes: DemoNode[];
   visibleNodes: string[];
   visibleLinks: DemoLink[];
+  linkProgress: Record<string, number>;
   highlightId: string | null;
   activeRole: string | null;
-}> = ({ nodes, visibleNodes, visibleLinks, highlightId, activeRole }) => {
+  nodeProgress: number;
+}> = ({ nodes, visibleNodes, visibleLinks, linkProgress, highlightId, activeRole, nodeProgress }) => {
   const positions = useMemo(() => {
     const centerX = 200;
     const centerY = 200;
-    const scale = 1.3;
+    const swirlTurns = 1.2;
     return nodes.reduce<Record<string, { x: number; y: number }>>((acc, node) => {
       const base = layout[node.id] || { x: centerX, y: centerY };
       const dx = base.x - centerX;
       const dy = base.y - centerY;
+      const radius = Math.hypot(dx, dy) * nodeProgress * 1.1;
+      const baseAngle = Math.atan2(dy, dx);
+      const angle = baseAngle + (1 - nodeProgress) * Math.PI * 2 * swirlTurns;
       acc[node.id] = {
-        x: centerX + dx * scale,
-        y: centerY + dy * scale,
+        x: centerX + Math.cos(angle) * radius,
+        y: centerY + Math.sin(angle) * radius,
       };
       return acc;
     }, {});
-  }, [nodes]);
+  }, [nodes, nodeProgress]);
 
   const isVisible = (id: string) => visibleNodes.includes(id);
 
@@ -121,13 +126,16 @@ const MiniGraph: React.FC<{
         nodes.find((n) => n.id === link.source && (n.role === activeRole || n.role === 'Core')) &&
         nodes.find((n) => n.id === link.target && (n.role === activeRole || n.role === 'Core'))
       );
+    const prog = Math.min(1, linkProgress[`${link.source}-${link.target}`] ?? 0);
+    const x2 = src.x + (tgt.x - src.x) * prog;
+    const y2 = src.y + (tgt.y - src.y) * prog;
     return (
       <line
         key={`${link.source}-${link.target}-${idx}`}
         x1={src.x}
         y1={src.y}
-        x2={tgt.x}
-        y2={tgt.y}
+        x2={x2}
+        y2={y2}
         stroke={linkColors[link.type]}
         strokeWidth={2.5}
         strokeOpacity={isFiltered ? 0.08 : highlightId === `${link.source}-${link.target}` ? 0.9 : 0.4}
@@ -175,15 +183,20 @@ const DemoBox: React.FC = () => {
   const [topic] = useState('AI GPU supply chain');
   const [visibleNodes, setVisibleNodes] = useState<string[]>([]);
   const [visibleLinks, setVisibleLinks] = useState<DemoLink[]>([]);
+  const [linkProgress, setLinkProgress] = useState<Record<string, number>>({});
+  const [nodeProgress, setNodeProgress] = useState(0);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [status, setStatus] = useState('Idle');
   const [playing, setPlaying] = useState(false);
   const [activeRole, setActiveRole] = useState<string | null>(null);
   const timers = useRef<number[]>([]);
+  const rafRef = useRef<number | null>(null);
 
   const clearTimers = () => {
     timers.current.forEach((t) => clearTimeout(t));
     timers.current = [];
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
   };
 
   useEffect(() => clearTimers, []);
@@ -194,6 +207,8 @@ const DemoBox: React.FC = () => {
     setPlaying(true);
     setVisibleNodes([]);
     setVisibleLinks([]);
+    setLinkProgress({});
+    setNodeProgress(0);
     setHighlightId(null);
     setActiveRole(null);
     setStatus('Reading inputs...');
@@ -201,23 +216,48 @@ const DemoBox: React.FC = () => {
     const nodeDelay = 500;
     const linkDelay = 450;
 
-    demoNodes.forEach((node, idx) => {
-      const t = window.setTimeout(() => {
-        setVisibleNodes((prev) => [...prev, node.id]);
-        setHighlightId(node.id);
-        setStatus(`Adding ${node.name}`);
-      }, idx * nodeDelay);
-      timers.current.push(t);
-    });
+    // Node swirl-in animation
+    const nodeStart = performance.now();
+    const nodeDuration = 1200;
+    const animateNodes = (time: number) => {
+      const elapsed = time - nodeStart;
+      const progress = Math.min(1, elapsed / nodeDuration);
+      setNodeProgress(progress);
+      setVisibleNodes(demoNodes.map((n) => n.id));
+      if (progress >= 1) setStatus('Building relationships...');
+      if (progress < 1) {
+        rafRef.current = requestAnimationFrame(animateNodes);
+      }
+    };
+    rafRef.current = requestAnimationFrame(animateNodes);
 
     const base = demoNodes.length * nodeDelay;
-    demoLinks.forEach((link, idx) => {
+    // Edge animation by type groups
+    const typeSequence: DemoLink['type'][] = ['SupplyChain', 'Customer', 'Partner', 'Competitor'];
+    let startOffset = base + 300;
+    typeSequence.forEach((type, typeIdx) => {
+      const linksOfType = demoLinks.filter((l) => l.type === type);
       const t = window.setTimeout(() => {
-        setVisibleLinks((prev) => [...prev, link]);
-        setHighlightId(`${link.source}-${link.target}`);
-        setStatus(`Linking ${link.source} → ${link.target}`);
-      }, base + idx * linkDelay);
+        setStatus(`Adding ${type} links`);
+        setVisibleLinks((prev) => [...prev, ...linksOfType]);
+        // animate growth
+        const start = performance.now();
+        const duration = 700;
+        const step = (time: number) => {
+          const p = Math.min(1, (time - start) / duration);
+          setLinkProgress((prev) => {
+            const next = { ...prev };
+            linksOfType.forEach((l) => {
+              next[`${l.source}-${l.target}`] = p;
+            });
+            return next;
+          });
+          if (p < 1) rafRef.current = requestAnimationFrame(step);
+        };
+        rafRef.current = requestAnimationFrame(step);
+      }, startOffset);
       timers.current.push(t);
+      startOffset += linksOfType.length * linkDelay + 200;
     });
 
     const end = base + demoLinks.length * linkDelay + 600;
@@ -260,8 +300,10 @@ const DemoBox: React.FC = () => {
           nodes={demoNodes}
           visibleNodes={visibleNodes}
           visibleLinks={visibleLinks}
+          linkProgress={linkProgress}
           highlightId={highlightId}
           activeRole={activeRole}
+          nodeProgress={nodeProgress}
         />
         <div className="flex flex-wrap gap-2 px-2 pb-2 mt-2">
           {['Core', 'Supplier', 'Customer', 'Competitor', 'Partner', 'Subsidiary', 'Other'].map((role) => (
