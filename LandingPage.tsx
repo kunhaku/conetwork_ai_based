@@ -4,11 +4,11 @@ import { ClusterGraph3D } from './components/landing/ClusterGraph3D';
 import { HeroOverlay } from './components/landing/HeroOverlay';
 
 const pipeline = [
-  { title: 'Agent S · Map Network', desc: 'Seed ego networks; tag core roles; collect sources.' },
-  { title: 'Agent Q · Financial Data', desc: 'Tickers, price, market cap, sector, size bucket.' },
-  { title: 'Agent X · Cross-Links', desc: '10–20 key relationships between existing nodes only.' },
-  { title: 'Agent F · Qualitative', desc: 'Growth profile, themes, risk notes, revenue, net income.' },
-  { title: 'Agent R · Report', desc: 'Executive overview, key players, hidden opportunities, risks, actions.' },
+  { title: 'Evidence Intake', desc: 'Collect recent news, IR/press, SEC, Wiki; keep reachable URLs only.' },
+  { title: 'Signal Extraction', desc: 'Extract nodes and links strictly from cited sources; every edge is clickable.' },
+  { title: 'Cross-Validation', desc: 'Deduplicate and keep 10–20 highest-signal relationships.' },
+  { title: 'Financial & Qualitative', desc: 'Ticker/price/cap plus growth profile, themes, risk notes.' },
+  { title: 'Briefing & Actions', desc: 'Key players, hidden bets, risks, and next steps in an executive brief.' },
 ];
 
 const reportBlocks = [
@@ -62,10 +62,10 @@ export const LandingPage: React.FC = () => {
       <section id="pipeline" className="relative z-10 bg-gray-950/80 backdrop-blur-xl border-t border-white/5 py-16 px-6 md:px-12">
         <div className="max-w-6xl mx-auto flex items-start justify-between gap-10">
           <div className="max-w-xl space-y-3">
-            <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Agent Pipeline</p>
-            <h2 className="text-3xl font-bold">5 agents from raw intent to strategic output</h2>
+            <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Evidence-first research flow</p>
+            <h2 className="text-3xl font-bold">From intent to investment-ready brief</h2>
             <p className="text-gray-400 text-sm">
-              Seeds and topics can be inferred automatically; outputs stay lean with curated links and grounded financials.
+              Curated sources → validated relationships → quantified context → executive output. No source → no link; every relationship carries a reachable URL.
             </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1 max-w-2xl">
