@@ -90,14 +90,19 @@ const MiniGraph: React.FC<{
   const positions = useMemo(() => {
     const centerX = 200;
     const centerY = 200;
-    const swirlTurns = 1.2;
+    const swirlTurns = 2.5;
     return nodes.reduce<Record<string, { x: number; y: number }>>((acc, node) => {
       const base = layout[node.id] || { x: centerX, y: centerY };
       const dx = base.x - centerX;
       const dy = base.y - centerY;
-      const radius = Math.hypot(dx, dy) * nodeProgress * 1.1;
+      const baseR = Math.hypot(dx, dy);
       const baseAngle = Math.atan2(dy, dx);
-      const angle = baseAngle + (1 - nodeProgress) * Math.PI * 2 * swirlTurns;
+
+      // Simultaneous swirl + expansion: as progress increases, radius grows and spin decays toward target angle
+      const p = Math.min(1, Math.max(0, nodeProgress));
+      const angle = baseAngle + (1 - p) * swirlTurns * Math.PI * 2;
+      const radius = baseR * (0.2 + 0.8 * p);
+
       acc[node.id] = {
         x: centerX + Math.cos(angle) * radius,
         y: centerY + Math.sin(angle) * radius,
