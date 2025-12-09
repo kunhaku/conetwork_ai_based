@@ -85,29 +85,22 @@ const MiniGraph: React.FC<{
   linkProgress: Record<string, number>;
   highlightId: string | null;
   activeRole: string | null;
-  nodeProgress: number;
-}> = ({ nodes, visibleNodes, visibleLinks, linkProgress, highlightId, activeRole, nodeProgress }) => {
+}> = ({ nodes, visibleNodes, visibleLinks, linkProgress, highlightId, activeRole }) => {
   const positions = useMemo(() => {
     const centerX = 200;
     const centerY = 200;
+    const scale = 1.5;
     return nodes.reduce<Record<string, { x: number; y: number }>>((acc, node) => {
       const base = layout[node.id] || { x: centerX, y: centerY };
       const dx = base.x - centerX;
       const dy = base.y - centerY;
-      const baseR = Math.hypot(dx, dy);
-      const baseAngle = Math.atan2(dy, dx);
-
-      // Explosion outward from center (no swirl)
-      const p = Math.min(1, Math.max(0, nodeProgress));
-      const radius = baseR * (0.2 + 0.8 * p);
-
       acc[node.id] = {
-        x: centerX + Math.cos(baseAngle) * radius,
-        y: centerY + Math.sin(baseAngle) * radius,
+        x: centerX + dx * scale,
+        y: centerY + dy * scale,
       };
       return acc;
     }, {});
-  }, [nodes, nodeProgress]);
+  }, [nodes]);
 
   const isVisible = (id: string) => visibleNodes.includes(id);
 
@@ -187,7 +180,6 @@ const DemoBox: React.FC = () => {
   const [visibleNodes, setVisibleNodes] = useState<string[]>([]);
   const [visibleLinks, setVisibleLinks] = useState<DemoLink[]>([]);
   const [linkProgress, setLinkProgress] = useState<Record<string, number>>({});
-  const [nodeProgress, setNodeProgress] = useState(0);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [status, setStatus] = useState('Idle');
   const [playing, setPlaying] = useState(false);
@@ -211,30 +203,27 @@ const DemoBox: React.FC = () => {
     setVisibleNodes([]);
     setVisibleLinks([]);
     setLinkProgress({});
-    setNodeProgress(0);
     setHighlightId(null);
     setActiveRole(null);
     setStatus('Reading inputs...');
 
-    const nodeDelay = 500;
-    const linkDelay = 450;
+    const nodeDelay = 140; // faster, overlapping
+    const linkDelay = 120;
 
-    // Node swirl-in animation
-    const nodeStart = performance.now();
-    const nodeDuration = 1200;
-    const animateNodes = (time: number) => {
-      const elapsed = time - nodeStart;
-      const progress = Math.min(1, elapsed / nodeDuration);
-      setNodeProgress(progress);
-      setVisibleNodes(demoNodes.map((n) => n.id));
-      if (progress >= 1) setStatus('Building relationships...');
-      if (progress < 1) {
-        rafRef.current = requestAnimationFrame(animateNodes);
-      }
-    };
-    rafRef.current = requestAnimationFrame(animateNodes);
+    // Node fade-in with overlap
+    demoNodes.forEach((node, idx) => {
+      const t = window.setTimeout(() => {
+        setVisibleNodes((prev) => Array.from(new Set([...prev, node.id])));
+        setHighlightId(node.id);
+        if (idx === demoNodes.length - 1) {
+          setStatus('Building relationships...');
+          setHighlightId(null);
+        }
+      }, idx * nodeDelay);
+      timers.current.push(t);
+    });
 
-    const base = demoNodes.length * nodeDelay;
+    const base = demoNodes.length * nodeDelay + 200;
     // Edge animation by type groups
     const typeSequence: DemoLink['type'][] = ['SupplyChain', 'Customer', 'Partner', 'Competitor'];
     let startOffset = base + 300;
@@ -306,7 +295,6 @@ const DemoBox: React.FC = () => {
           linkProgress={linkProgress}
           highlightId={highlightId}
           activeRole={activeRole}
-          nodeProgress={nodeProgress}
         />
         <div className="flex flex-wrap gap-2 px-2 pb-2 mt-2">
           {['Core', 'Supplier', 'Customer', 'Competitor', 'Partner', 'Subsidiary', 'Other'].map((role) => (
