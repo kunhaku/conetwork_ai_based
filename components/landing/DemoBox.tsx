@@ -20,6 +20,24 @@ const demoNodes: DemoNode[] = [
   { id: 'GlobalAI', name: 'Global AI Market', role: 'Other' },
 ];
 
+// Fixed layout to mimic real usage (closer to provided screenshot)
+const layout: Record<string, { x: number; y: number }> = {
+  NVIDIA: { x: 230, y: 220 },
+  TSMC: { x: 150, y: 220 },
+  Samsung: { x: 210, y: 90 },
+  Intel: { x: 195, y: 155 },
+  AMD: { x: 160, y: 265 },
+  Foxconn: { x: 175, y: 195 },
+  GlobalSemi: { x: 90, y: 220 },
+  Dell: { x: 210, y: 190 },
+  HPE: { x: 250, y: 175 },
+  Supermicro: { x: 250, y: 270 },
+  Amazon: { x: 320, y: 200 },
+  Google: { x: 330, y: 245 },
+  Microsoft: { x: 310, y: 265 },
+  GlobalAI: { x: 200, y: 235 },
+};
+
 const demoLinks: DemoLink[] = [
   { source: 'NVIDIA', target: 'TSMC', type: 'SupplyChain' },
   { source: 'TSMC', target: 'GlobalSemi', type: 'SupplyChain' },
@@ -68,15 +86,9 @@ const MiniGraph: React.FC<{
   activeRole: string | null;
 }> = ({ nodes, visibleNodes, visibleLinks, highlightId, activeRole }) => {
   const positions = useMemo(() => {
-    const centerX = 200;
-    const centerY = 140;
-    const radius = 95;
-    return nodes.reduce<Record<string, { x: number; y: number }>>((acc, node, idx) => {
-      const angle = (idx / nodes.length) * Math.PI * 2;
-      acc[node.id] = {
-        x: centerX + Math.cos(angle) * radius,
-        y: centerY + Math.sin(angle) * radius,
-      };
+    return nodes.reduce<Record<string, { x: number; y: number }>>((acc, node) => {
+      const pos = layout[node.id] || { x: 200, y: 140 };
+      acc[node.id] = pos;
       return acc;
     }, {});
   }, [nodes]);
@@ -151,8 +163,8 @@ const MiniGraph: React.FC<{
 };
 
 const DemoBox: React.FC = () => {
-  const [seeds, setSeeds] = useState('NVIDIA\nTSMC');
-  const [topic, setTopic] = useState('AI GPU supply chain');
+  const [seeds] = useState('NVIDIA\nTSMC');
+  const [topic] = useState('AI GPU supply chain');
   const [visibleNodes, setVisibleNodes] = useState<string[]>([]);
   const [visibleLinks, setVisibleLinks] = useState<DemoLink[]>([]);
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -214,21 +226,15 @@ const DemoBox: React.FC = () => {
       <div className="flex flex-col gap-3">
         <div>
           <label className="text-xs text-gray-400">Seed companies</label>
-          <textarea
-            className="w-full mt-1 p-3 rounded-lg bg-white/5 border border-white/10 text-sm text-white h-28 font-mono"
-            value={seeds}
-            onChange={(e) => setSeeds(e.target.value)}
-            disabled={playing}
-          />
+          <div className="w-full mt-1 p-3 rounded-lg bg-white/5 border border-white/10 text-sm text-white h-28 font-mono">
+            <p className="whitespace-pre-line">{seeds}</p>
+          </div>
         </div>
         <div>
           <label className="text-xs text-gray-400">Research topic</label>
-          <input
-            className="w-full mt-1 p-3 rounded-lg bg-white/5 border border-white/10 text-sm text-white"
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-            disabled={playing}
-          />
+          <div className="w-full mt-1 p-3 rounded-lg bg-white/5 border border-white/10 text-sm text-white">
+            {topic}
+          </div>
         </div>
         <button
           onClick={playDemo}
