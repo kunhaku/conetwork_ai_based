@@ -107,8 +107,8 @@ export const LandingPage: React.FC = () => {
         id="demo"
         className="relative z-10 bg-gray-950/90 backdrop-blur-xl border-t border-white/5 py-16 px-6 md:px-12"
       >
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row gap-10 items-stretch">
-          <div className="md:w-2/3">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row gap-8 items-stretch">
+          <div className="md:w-3/4">
             <div className="h-full rounded-2xl border border-white/10 bg-white/5 p-6 shadow-inner shadow-cyan-500/10 flex flex-col">
               <div className="flex items-center justify-between mb-4">
                 <div>
@@ -122,7 +122,7 @@ export const LandingPage: React.FC = () => {
               </div>
             </div>
           </div>
-          <div className="md:w-1/3 space-y-4">
+          <div className="md:w-1/4 space-y-4">
             <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
               <p className="text-sm font-semibold mb-1">Graph interactions</p>
               <p className="text-xs text-gray-400">Role/relationship filtering, hover focus, PNG/JSON export.</p>
