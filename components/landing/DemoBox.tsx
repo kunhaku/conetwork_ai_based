@@ -87,16 +87,29 @@ const MiniGraph: React.FC<{
   activeRole: string | null;
 }> = ({ nodes, visibleNodes, visibleLinks, linkProgress, highlightId, activeRole }) => {
   const positions = useMemo(() => {
-    const centerX = 200;
-    const centerY = 200;
-    const scale = 1.5;
+    // Fit layout into viewBox with generous padding and centering
+    const vw = 620;
+    const vh = 480;
+    const pad = 60;
+
+    const coords = nodes.map((n) => layout[n.id] || { x: 0, y: 0 });
+    const minX = Math.min(...coords.map((p) => p.x));
+    const maxX = Math.max(...coords.map((p) => p.x));
+    const minY = Math.min(...coords.map((p) => p.y));
+    const maxY = Math.max(...coords.map((p) => p.y));
+    const width = Math.max(1, maxX - minX);
+    const height = Math.max(1, maxY - minY);
+    const baseScale = Math.min((vw - pad * 2) / width, (vh - pad * 2) / height);
+    const scale = baseScale * 1.2; // enlarge a bit more
+
+    const offsetX = (vw - width * scale) / 2 - minX * scale;
+    const offsetY = (vh - height * scale) / 2 - minY * scale;
+
     return nodes.reduce<Record<string, { x: number; y: number }>>((acc, node) => {
-      const base = layout[node.id] || { x: centerX, y: centerY };
-      const dx = base.x - centerX;
-      const dy = base.y - centerY;
+      const base = layout[node.id] || { x: 0, y: 0 };
       acc[node.id] = {
-        x: centerX + dx * scale,
-        y: centerY + dy * scale,
+        x: base.x * scale + offsetX,
+        y: base.y * scale + offsetY,
       };
       return acc;
     }, {});
@@ -105,7 +118,7 @@ const MiniGraph: React.FC<{
   const isVisible = (id: string) => visibleNodes.includes(id);
 
   return (
-    <svg viewBox="0 0 400 280" className="w-full h-full">
+    <svg viewBox="0 0 620 480" className="w-full h-full">
       <defs>
         <linearGradient id="edgeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.15" />
@@ -138,35 +151,46 @@ const MiniGraph: React.FC<{
       />
     );
   })}
-  {nodes.map((node) => {
-    const pos = positions[node.id];
-    const visible = isVisible(node.id);
-    const highlighted = highlightId === node.id;
-    const filtered = activeRole && !(node.role === activeRole || node.role === 'Core');
-    return (
-      <g
-        key={node.id}
-        transform={`translate(${pos.x},${pos.y})`}
-        opacity={visible ? (filtered ? 0.2 : 1) : 0}
-        className="transition-all duration-300"
-      >
-        <circle
-          r={visible ? 12 : 0}
-          fill={roleColors[node.role] || roleColors.Other}
-          stroke="#0ea5e9"
+      {nodes.map((node) => {
+        const pos = positions[node.id];
+        const visible = isVisible(node.id);
+        const highlighted = highlightId === node.id;
+        const filtered = activeRole && !(node.role === activeRole || node.role === 'Core');
+        const parts = node.name.split(' ');
+        const label =
+          parts.length > 2
+            ? [parts.slice(0, Math.ceil(parts.length / 2)).join(' '), parts.slice(Math.ceil(parts.length / 2)).join(' ')]
+            : [node.name];
+        return (
+          <g
+            key={node.id}
+            transform={`translate(${pos.x},${pos.y})`}
+            opacity={visible ? (filtered ? 0.2 : 1) : 0}
+            className="transition-all duration-300"
+          >
+            <circle
+          r={visible ? 13 : 0}
+              fill={roleColors[node.role] || roleColors.Other}
+              stroke="#0ea5e9"
               strokeWidth={highlighted ? 3 : 0}
               className={highlighted ? 'animate-pulse' : ''}
             />
-            <text
-              textAnchor="middle"
-              y={visible ? -18 : 0}
-              fill="#e2e8f0"
-              fontSize="10"
-              fontWeight={600}
-              style={{ pointerEvents: 'none' }}
-            >
-              {node.name}
-            </text>
+            {label.map((line, idx) => {
+              const startY = visible ? -18 - (label.length - 1) * 12 : 0;
+              return (
+              <text
+                key={idx}
+                textAnchor="middle"
+                y={startY + idx * 12}
+                fill="#e2e8f0"
+                fontSize="11"
+                fontWeight={600}
+                style={{ pointerEvents: 'none' }}
+              >
+                {line}
+              </text>
+            );
+            })}
           </g>
         );
       })}
@@ -262,58 +286,62 @@ const DemoBox: React.FC = () => {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full">
-      <div className="flex flex-col gap-3">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-full">
+      <div className="flex flex-col gap-4 w-full lg:col-span-4">
         <div>
-          <label className="text-xs text-gray-400">Seed companies</label>
-          <div className="w-full mt-1 p-3 rounded-lg bg-white/5 border border-white/10 text-sm text-white h-28 font-mono">
+          <label className="text-sm text-gray-300">Seed companies</label>
+          <div className="w-full mt-1 p-3 rounded-lg bg-white/5 border border-white/10 text-base text-white h-28 font-mono">
             <p className="whitespace-pre-line">{seeds}</p>
           </div>
         </div>
         <div>
-          <label className="text-xs text-gray-400">Research topic</label>
-          <div className="w-full mt-1 p-3 rounded-lg bg-white/5 border border-white/10 text-sm text-white">
+          <label className="text-sm text-gray-300">Research topic</label>
+          <div className="w-full mt-1 p-3 rounded-lg bg-white/5 border border-white/10 text-base text-white">
             {topic}
           </div>
         </div>
         <button
           onClick={playDemo}
           disabled={playing}
-          className={`mt-2 inline-flex items-center justify-center px-4 py-2 rounded-lg text-sm font-semibold ${
+          className={`mt-2 inline-flex items-center justify-center px-5 py-3 rounded-lg text-base font-semibold ${
             playing ? 'bg-cyan-400/60 text-white/80 cursor-not-allowed' : 'bg-cyan-500 text-white hover:bg-cyan-400'
           }`}
         >
           {playing ? 'Generating...' : 'Generate'}
         </button>
-        <p className="text-xs text-gray-400">Status: {status}</p>
+        <p className="text-sm text-gray-400">Status: {status}</p>
       </div>
-      <div className="rounded-xl border border-white/10 bg-gradient-to-br from-slate-900/60 to-slate-800/40 p-2 min-h-[280px]">
-        <MiniGraph
-          nodes={demoNodes}
-          visibleNodes={visibleNodes}
-          visibleLinks={visibleLinks}
-          linkProgress={linkProgress}
-          highlightId={highlightId}
-          activeRole={activeRole}
-        />
-        <div className="flex flex-wrap gap-2 px-2 pb-2 mt-2">
-          {['Core', 'Supplier', 'Customer', 'Competitor', 'Partner', 'Subsidiary', 'Other'].map((role) => (
-            <button
-              key={role}
-              onMouseEnter={() => setActiveRole(role)}
-              onMouseLeave={() => setActiveRole(null)}
-              onClick={() => setActiveRole((prev) => (prev === role ? null : role))}
-              className={`px-2 py-1 rounded-full text-[10px] border ${
-                activeRole === role ? 'border-cyan-300 bg-cyan-500/20 text-white' : 'border-white/10 text-gray-300'
-              }`}
-            >
-              <span
-                className="inline-block w-2 h-2 rounded-full mr-2 align-middle"
-                style={{ backgroundColor: roleColors[role] || roleColors.Other }}
-              />
-              {role}
-            </button>
-          ))}
+      <div className="rounded-xl border border-white/10 bg-gradient-to-br from-slate-900/60 to-slate-800/40 p-4 min-h-[520px] flex-1 lg:col-span-8 flex flex-col gap-3">
+        <div className="flex-1">
+          <MiniGraph
+            nodes={demoNodes}
+            visibleNodes={visibleNodes}
+            visibleLinks={visibleLinks}
+            linkProgress={linkProgress}
+            highlightId={highlightId}
+            activeRole={activeRole}
+          />
+        </div>
+        <div className="border-t border-white/10 pt-2">
+          <div className="flex flex-wrap gap-2">
+            {['Core', 'Supplier', 'Customer', 'Competitor', 'Partner', 'Subsidiary', 'Other'].map((role) => (
+              <button
+                key={role}
+                onMouseEnter={() => setActiveRole(role)}
+                onMouseLeave={() => setActiveRole(null)}
+                onClick={() => setActiveRole((prev) => (prev === role ? null : role))}
+                className={`px-3 py-1.5 rounded-full text-xs border relative overflow-hidden ${
+                  activeRole === role ? 'border-cyan-300 bg-cyan-500/20 text-white' : 'border-white/10 text-gray-300'
+                } ${role === 'Customer' ? 'animate-pulse' : ''}`}
+              >
+                <span
+                  className="inline-block w-2 h-2 rounded-full mr-2 align-middle"
+                  style={{ backgroundColor: roleColors[role] || roleColors.Other }}
+                />
+                {role}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>
