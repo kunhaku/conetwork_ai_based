@@ -11,6 +11,13 @@ const pipeline = [
   { title: 'Briefing & Actions', desc: 'Key players, hidden bets, risks, and next steps in an executive brief.' },
 ];
 
+const flowSteps = [
+  { title: 'Curated sources', desc: 'Recent news, IR/SEC, Wiki; reachable URLs only.' },
+  { title: 'Validated relationships', desc: 'Edges derived strictly from cited sources.' },
+  { title: 'Quantified context', desc: 'Ticker/price/cap plus growth, themes, risks.' },
+  { title: 'Executive output', desc: 'Key players, hidden bets, risks, next steps.' },
+];
+
 const reportBlocks = [
   { title: 'Executive Overview', desc: 'Theme narrative synthesized from the live graph.' },
   { title: 'Key / Secondary Players', desc: 'Critical nodes plus second-tier beneficiaries with rationale.' },
@@ -64,9 +71,22 @@ export const LandingPage: React.FC = () => {
           <div className="max-w-xl space-y-3">
             <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Evidence-first research flow</p>
             <h2 className="text-3xl font-bold">From intent to investment-ready brief</h2>
-            <p className="text-gray-400 text-sm">
-              Curated sources → validated relationships → quantified context → executive output. No source → no link; every relationship carries a reachable URL.
-            </p>
+            <div className="mt-4 space-y-3">
+              {flowSteps.map((step, idx) => (
+                <div key={step.title} className="flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-full border border-cyan-400 text-cyan-200 text-xs font-semibold flex items-center justify-center mt-0.5">
+                    {idx + 1}
+                  </div>
+                  <div>
+                    <p className="text-sm text-white font-semibold">{step.title}</p>
+                    <p className="text-sm text-gray-400">{step.desc}</p>
+                  </div>
+                </div>
+              ))}
+              <p className="text-sm text-gray-400 pt-1 border-t border-white/10 mt-2">
+                No source → no link; every relationship carries a reachable URL.
+              </p>
+            </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1 max-w-2xl">
             {pipeline.map((item) => (
