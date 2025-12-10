@@ -233,7 +233,18 @@ export const LandingPage: React.FC = () => {
                     onChange={(e) => setWaitlistConsent(e.target.checked)}
                     className="mt-1"
                   />
-                  <span>I agree to the Beta terms and privacy policy.</span>
+                  <span>
+                    I agree to the{' '}
+                    <a
+                      href="/beta-terms"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline text-cyan-300 hover:text-cyan-200"
+                    >
+                      Beta terms and privacy policy
+                    </a>
+                    .
+                  </span>
                 </label>
                 <button
                   type="submit"

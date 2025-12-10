@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import LandingPage from './LandingPage.tsx';
 import BetaGate from './components/BetaGate';
+import BetaTerms from './components/BetaTerms';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -12,6 +13,7 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 const path = window.location.pathname || '/';
 const useApp = path === '/app' || path.startsWith('/app/');
+const useTerms = path === '/beta-terms' || path === '/privacy' || path === '/terms';
 
 const RootApp: React.FC = () => {
   const validCodes = useMemo(() => ['BETA2025', 'NEXUSBETA'], []);
@@ -32,6 +34,10 @@ const RootApp: React.FC = () => {
       setBetaAccess(true);
     }
   }, [useApp, validCodes]);
+
+  if (useTerms) {
+    return <BetaTerms />;
+  }
 
   if (useApp && !betaAccess) {
     return <BetaGate onUnlock={() => setBetaAccess(true)} validCodes={validCodes} />;
