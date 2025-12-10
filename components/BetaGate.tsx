@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 interface BetaGateProps {
   onUnlock: () => void;
@@ -7,12 +7,38 @@ interface BetaGateProps {
 
 const BetaGate: React.FC<BetaGateProps> = ({ onUnlock, validCodes }) => {
   const WAITLIST_ENDPOINT = import.meta.env.VITE_WAITLIST_ENDPOINT as string | undefined;
+  const WAITLIST_SEND_CODE_ENDPOINT = import.meta.env.VITE_WAITLIST_SEND_CODE_ENDPOINT as string | undefined;
+  const WAITLIST_VERIFY_CODE_ENDPOINT = import.meta.env.VITE_WAITLIST_VERIFY_CODE_ENDPOINT as string | undefined;
   const [inviteCode, setInviteCode] = useState('');
   const [gateError, setGateError] = useState('');
   const [waitlistEmail, setWaitlistEmail] = useState('');
+  const [waitlistEmailConfirm, setWaitlistEmailConfirm] = useState('');
   const [waitlistName, setWaitlistName] = useState('');
+  const [waitlistCompany, setWaitlistCompany] = useState('');
+  const [waitlistTitle, setWaitlistTitle] = useState('');
   const [waitlistConsent, setWaitlistConsent] = useState(false);
   const [waitlistSubmitted, setWaitlistSubmitted] = useState(false);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [codeStatus, setCodeStatus] = useState<'idle' | 'sending' | 'sent' | 'verifying' | 'verified'>('idle');
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = window.setTimeout(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
+    return () => window.clearTimeout(t);
+  }, [cooldown]);
+
+  const emailsValid = () => {
+    if (!waitlistEmail.trim() || !waitlistEmailConfirm.trim()) {
+      setGateError('Please enter and confirm your email.');
+      return false;
+    }
+    if (waitlistEmail.trim().toLowerCase() !== waitlistEmailConfirm.trim().toLowerCase()) {
+      setGateError('Emails do not match.');
+      return false;
+    }
+    return true;
+  };
 
   const handleValidate = () => {
     if (validCodes.includes(inviteCode.trim())) {
@@ -24,10 +50,84 @@ const BetaGate: React.FC<BetaGateProps> = ({ onUnlock, validCodes }) => {
     }
   };
 
+  const handleSendCode = () => {
+    setGateError('');
+    if (!emailsValid()) return;
+    if (!WAITLIST_SEND_CODE_ENDPOINT) {
+      setGateError('Waitlist send-code API not configured (missing VITE_WAITLIST_SEND_CODE_ENDPOINT).');
+      return;
+    }
+    setCodeStatus('sending');
+    fetch(WAITLIST_SEND_CODE_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: waitlistEmail.trim(),
+        confirmEmail: waitlistEmailConfirm.trim(),
+      }),
+    })
+      .then((resp) => {
+        if (resp.ok) {
+          setCodeStatus('sent');
+          setCooldown(60);
+        } else {
+          setCodeStatus('idle');
+          setGateError('Failed to send verification code. Please try again.');
+        }
+      })
+      .catch(() => {
+        setCodeStatus('idle');
+        setGateError('Unable to reach send-code API. Please retry.');
+      });
+  };
+
+  const handleVerifyCode = () => {
+    setGateError('');
+    if (!emailsValid()) return;
+    if (!verificationCode.trim()) {
+      setGateError('Enter the verification code we emailed you.');
+      return;
+    }
+    if (!WAITLIST_VERIFY_CODE_ENDPOINT) {
+      setGateError('Waitlist verify API not configured (missing VITE_WAITLIST_VERIFY_CODE_ENDPOINT).');
+      return;
+    }
+    setCodeStatus('verifying');
+    fetch(WAITLIST_VERIFY_CODE_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: waitlistEmail.trim(),
+        code: verificationCode.trim(),
+      }),
+    })
+      .then((resp) => {
+        if (resp.ok) {
+          setCodeStatus('verified');
+        } else {
+          setCodeStatus('sent');
+          setGateError('Verification code invalid or expired.');
+        }
+      })
+      .catch(() => {
+        setCodeStatus('sent');
+        setGateError('Unable to reach verify API. Please retry.');
+      });
+  };
+
   const handleWaitlist = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!waitlistConsent || !waitlistEmail.trim()) {
-      setGateError('Please enter your email and accept the terms.');
+    if (!waitlistConsent) {
+      setGateError('Please accept the terms.');
+      return;
+    }
+    if (!emailsValid()) return;
+    if (!waitlistCompany.trim() || !waitlistTitle.trim()) {
+      setGateError('Company and title are required.');
+      return;
+    }
+    if (codeStatus !== 'verified') {
+      setGateError('Please verify your email with the code we sent.');
       return;
     }
     if (!WAITLIST_ENDPOINT) {
@@ -40,8 +140,12 @@ const BetaGate: React.FC<BetaGateProps> = ({ onUnlock, validCodes }) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email: waitlistEmail,
+        emailConfirm: waitlistEmailConfirm,
         name: waitlistName,
+        company: waitlistCompany,
+        title: waitlistTitle,
         consent: waitlistConsent,
+        verificationCode,
       }),
     })
       .then(async (resp) => {
@@ -95,17 +199,84 @@ const BetaGate: React.FC<BetaGateProps> = ({ onUnlock, validCodes }) => {
                 required
                 value={waitlistEmail}
                 onChange={(e) => setWaitlistEmail(e.target.value)}
-                placeholder="Email (required)"
+                placeholder="Work email (required)"
+                className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              />
+              <input
+                type="email"
+                required
+                value={waitlistEmailConfirm}
+                onChange={(e) => setWaitlistEmailConfirm(e.target.value)}
+                placeholder="Confirm email (required)"
+                className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              />
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                onClick={handleSendCode}
+                disabled={codeStatus === 'sending' || cooldown > 0}
+                className={`w-full sm:w-44 px-4 py-2 rounded-lg text-sm font-semibold border ${
+                  codeStatus === 'sending' || cooldown > 0
+                    ? 'bg-white/5 border-white/10 text-gray-400 cursor-not-allowed'
+                    : 'bg-cyan-500 text-white border-cyan-400 hover:bg-cyan-400'
+                }`}
+              >
+                {codeStatus === 'sending'
+                  ? 'Sending...'
+                  : cooldown > 0
+                  ? `Resend in ${cooldown}s`
+                  : codeStatus === 'sent'
+                  ? 'Resend code'
+                  : 'Send code'}
+              </button>
+              <div className="flex flex-1 gap-2">
+                <input
+                  type="text"
+                  value={verificationCode}
+                  onChange={(e) => setVerificationCode(e.target.value)}
+                  placeholder="Verification code"
+                  className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleVerifyCode}
+                  disabled={codeStatus === 'verifying' || !verificationCode.trim()}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+                    codeStatus === 'verified'
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-white/5 border border-white/10 text-white hover:bg-white/10'
+                  }`}
+                >
+                  {codeStatus === 'verifying' ? 'Verifying...' : codeStatus === 'verified' ? 'Verified' : 'Verify'}
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input
+                type="text"
+                required
+                value={waitlistCompany}
+                onChange={(e) => setWaitlistCompany(e.target.value)}
+                placeholder="Company (required)"
                 className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
               />
               <input
                 type="text"
-                value={waitlistName}
-                onChange={(e) => setWaitlistName(e.target.value)}
-                placeholder="Name (optional)"
+                required
+                value={waitlistTitle}
+                onChange={(e) => setWaitlistTitle(e.target.value)}
+                placeholder="Title (required)"
                 className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
               />
             </div>
+            <input
+              type="text"
+              value={waitlistName}
+              onChange={(e) => setWaitlistName(e.target.value)}
+              placeholder="Name (optional)"
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            />
             <label className="flex items-start gap-2 text-xs text-gray-300">
               <input
                 type="checkbox"
