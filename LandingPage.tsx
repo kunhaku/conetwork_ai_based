@@ -30,6 +30,7 @@ export const LandingPage: React.FC = () => {
   const WAITLIST_ENDPOINT = import.meta.env.VITE_WAITLIST_ENDPOINT as string | undefined;
   const WAITLIST_SEND_CODE_ENDPOINT = import.meta.env.VITE_WAITLIST_SEND_CODE_ENDPOINT as string | undefined;
   const WAITLIST_VERIFY_CODE_ENDPOINT = import.meta.env.VITE_WAITLIST_VERIFY_CODE_ENDPOINT as string | undefined;
+  const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
   const [showGate, setShowGate] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
   const [gateError, setGateError] = useState('');
@@ -84,10 +85,15 @@ export const LandingPage: React.FC = () => {
       setGateError('Waitlist send-code API not configured (missing VITE_WAITLIST_SEND_CODE_ENDPOINT).');
       return;
     }
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (SUPABASE_ANON_KEY) {
+      headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`;
+      headers.apikey = SUPABASE_ANON_KEY;
+    }
     setCodeStatus('sending');
     fetch(WAITLIST_SEND_CODE_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         email: waitlistEmail.trim(),
         confirmEmail: waitlistEmailConfirm.trim(),
@@ -119,10 +125,15 @@ export const LandingPage: React.FC = () => {
       setGateError('Waitlist verify API not configured (missing VITE_WAITLIST_VERIFY_CODE_ENDPOINT).');
       return;
     }
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (SUPABASE_ANON_KEY) {
+      headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`;
+      headers.apikey = SUPABASE_ANON_KEY;
+    }
     setCodeStatus('verifying');
     fetch(WAITLIST_VERIFY_CODE_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         email: waitlistEmail.trim(),
         code: verificationCode.trim(),
@@ -161,9 +172,14 @@ export const LandingPage: React.FC = () => {
       setGateError('Waitlist API not configured (missing VITE_WAITLIST_ENDPOINT).');
       return;
     }
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (SUPABASE_ANON_KEY) {
+      headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`;
+      headers.apikey = SUPABASE_ANON_KEY;
+    }
     fetch(WAITLIST_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         email: waitlistEmail,
         emailConfirm: waitlistEmailConfirm,
