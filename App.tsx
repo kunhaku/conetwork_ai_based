@@ -4,7 +4,7 @@ import InputPanel from './components/InputPanel';
 import GraphCanvas from './components/GraphCanvas';
 import DetailPanel from './components/DetailPanel';
 import ReportPanel from './components/ReportPanel';
-import { UnifiedGraph, GraphNode, PipelineStatus, PipelineStage } from './types';
+import { UnifiedGraph, GraphNode, PipelineStatus, PipelineStage, GraphCompleteness } from './types';
 import { runPipeline } from './services/geminiService';
 
 type ViewMode = 'graph' | 'report';
@@ -29,6 +29,7 @@ const App: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('graph');
   const [inferredTopic, setInferredTopic] = useState<string | null>(null);
   const [inferredSeeds, setInferredSeeds] = useState<string[] | null>(null);
+  const [graphCompleteness, setGraphCompleteness] = useState<GraphCompleteness | null>(null);
 
   const handleGenerate = useCallback(async (seeds: string[], topic: string) => {
     // Quick connectivity check
@@ -52,6 +53,7 @@ const App: React.FC = () => {
     setViewMode('graph');
     setInferredTopic(null);
     setInferredSeeds(null);
+    setGraphCompleteness(null);
 
     try {
       const data = await runPipeline(
@@ -71,9 +73,13 @@ const App: React.FC = () => {
         // 4. Seeds Inferred Callback
         (detectedSeeds) => {
             setInferredSeeds(detectedSeeds);
+        },
+        (metrics) => {
+            setGraphCompleteness(metrics);
         }
       );
       setGraphData(data);
+      setGraphCompleteness(data.completeness ?? null);
     } catch (err: any) {
       setStatus({ stage: 'error', message: err.message || "An unexpected error occurred.", progress: 0 });
     }
@@ -148,6 +154,7 @@ const App: React.FC = () => {
         graphData={graphData} 
         selectedNode={selectedNode}
         pipelineStatus={status}
+        completeness={graphCompleteness}
       />
     </div>
   );

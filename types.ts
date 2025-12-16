@@ -68,12 +68,27 @@ export interface ResearchReport {
   disclaimer: string;
 }
 
+export interface GraphCompleteness {
+  score: number;
+  seedCoverage: number;
+  roleDiversity: number;
+  depthReach: number;
+  sourceDensity: number;
+  novelty: number;
+  underCoveredSeeds: string[];
+  missingRoles: string[];
+  frontierNodes: { id: string; name: string; role?: GraphNode['role'] }[];
+  recommendedSeeds: string[];
+  highImpactNodes: { id: string; name: string; degree: number }[];
+}
+
 export interface UnifiedGraph {
   summary: string; // Kept for legacy compatibility, though Report replaces it
   nodes: GraphNode[];
   links: GraphLink[];
   sources: GraphSource[];
   report?: ResearchReport; // New Report Object
+  completeness?: GraphCompleteness;
 }
 
 export interface AnalysisRequest {

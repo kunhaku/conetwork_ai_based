@@ -1,16 +1,17 @@
 
 
 import React, { useMemo } from 'react';
-import { GraphNode, UnifiedGraph, PipelineStatus, GraphSource } from '../types';
+import { GraphNode, UnifiedGraph, PipelineStatus, GraphSource, GraphCompleteness } from '../types';
 import { LINK_COLORS } from '../constants';
 
 interface DetailPanelProps {
   graphData: UnifiedGraph | null;
   selectedNode: GraphNode | null;
   pipelineStatus: PipelineStatus;
+  completeness: GraphCompleteness | null;
 }
 
-const DetailPanel: React.FC<DetailPanelProps> = ({ graphData, selectedNode, pipelineStatus }) => {
+const DetailPanel: React.FC<DetailPanelProps> = ({ graphData, selectedNode, pipelineStatus, completeness }) => {
   const isPipelineActive = pipelineStatus.stage !== 'idle' && pipelineStatus.stage !== 'complete' && pipelineStatus.stage !== 'error';
   
   // LOGIC UPDATE:
@@ -51,6 +52,16 @@ const DetailPanel: React.FC<DetailPanelProps> = ({ graphData, selectedNode, pipe
         return srcId === selectedNode.id || tgtId === selectedNode.id;
       })
     : [];
+  const formatPercent = (value: number) => `${Math.round(value * 100)}%`;
+  const completenessMetrics = completeness
+    ? [
+        { label: 'Seed Coverage', value: completeness.seedCoverage },
+        { label: 'Role Diversity', value: completeness.roleDiversity },
+        { label: 'Depth Reach', value: completeness.depthReach },
+        { label: 'Source Density', value: completeness.sourceDensity },
+        { label: 'Novelty', value: completeness.novelty },
+      ]
+    : [];
 
   return (
     <div className="w-96 bg-white/5 backdrop-blur-xl border-l border-white/10 flex flex-col h-full shadow-[0_10px_40px_rgba(0,0,0,0.35)] z-20 overflow-hidden flex-shrink-0 text-gray-100">
@@ -61,6 +72,63 @@ const DetailPanel: React.FC<DetailPanelProps> = ({ graphData, selectedNode, pipe
       </div>
 
       <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
+        {graphData && completeness && (
+          <div className="mb-5 bg-cyan-500/5 border border-cyan-500/30 rounded-xl p-4 shadow-inner">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-200">Graph completeness</p>
+                <p className="text-3xl font-extrabold text-white mt-1">{formatPercent(completeness.score)}</p>
+              </div>
+              <div className="text-right text-[11px] text-gray-300">
+                <p>Frontier nodes: <span className="font-semibold text-white">{completeness.frontierNodes.length}</span></p>
+                <p>High-impact hubs: <span className="font-semibold text-white">{completeness.highImpactNodes.length}</span></p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {completenessMetrics.map((metric) => (
+                <div key={metric.label}>
+                  <div className="flex items-center justify-between text-[11px] text-gray-300 mb-1">
+                    <span>{metric.label}</span>
+                    <span className="font-semibold text-white">{formatPercent(metric.value)}</span>
+                  </div>
+                  <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-cyan-400 to-indigo-500"
+                      style={{ width: `${Math.max(5, Math.min(100, Math.round(metric.value * 100)))}%` }}
+                    ></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {(completeness.recommendedSeeds.length > 0 || completeness.missingRoles.length > 0) && (
+              <div className="mt-4 grid grid-cols-1 gap-3 text-[11px] text-gray-200">
+                {completeness.recommendedSeeds.length > 0 && (
+                  <div>
+                    <p className="uppercase tracking-[0.2em] text-[9px] text-cyan-200 mb-1">Suggested seeds</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {completeness.recommendedSeeds.map((seed) => (
+                        <span key={seed} className="px-2 py-0.5 rounded-full bg-white/10 text-white border border-white/20">{seed}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {completeness.missingRoles.length > 0 && (
+                  <div>
+                    <p className="uppercase tracking-[0.2em] text-[9px] text-rose-200 mb-1">Needs more</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {completeness.missingRoles.map((role) => (
+                        <span key={role} className="px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-200 border border-rose-400/40">
+                          {role}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {selectedNode ? (
           <div className="animate-fade-in">
             {/* Header Identity */}

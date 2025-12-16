@@ -1,4 +1,4 @@
-import { UnifiedGraph, AnalysisRequest, GraphNode, GraphLink, GraphSource, ResearchReport, PipelineStatus, InferredLayer } from "../types";
+import { UnifiedGraph, AnalysisRequest, GraphNode, GraphLink, GraphSource, ResearchReport, PipelineStatus, InferredLayer, GraphCompleteness } from "../types";
 import { 
     AGENT_S_SYSTEM_INSTRUCTION, 
     AGENT_Q_SYSTEM_INSTRUCTION, 
@@ -15,6 +15,21 @@ const FINANCE_API = import.meta.env.VITE_FINANCE_API || '/api/finance/quote';
 const DB_API = import.meta.env.VITE_DB_API || '/api/db/graph/upsert';
 const MIN_LINKS_S = 5;
 const MAX_ATTEMPTS_S = 3;
+const MAX_SEED_ROUNDS = 2;
+const FRONTIER_SEED_LIMIT = 4;
+const COMPLETENESS_EXPAND_THRESHOLD = 0.72;
+const SEED_DEGREE_TARGET = 3;
+const DEPTH_TARGET = 2.5;
+
+const ROLE_EXPECTED_DISTRIBUTION: Record<string, number> = {
+  Core: 0.2,
+  Supplier: 0.2,
+  Customer: 0.2,
+  Partner: 0.2,
+  Competitor: 0.15,
+  Other: 0.05,
+};
+const ROLE_KEYS = Object.keys(ROLE_EXPECTED_DISTRIBUTION);
 const isValidHttpUrl = (url: any) => {
   if (typeof url !== 'string') return false;
   try {
@@ -146,6 +161,205 @@ const runAgentS = async (seed: string, topic: string, layer?: string): Promise<U
     console.error(`Agent S failed for ${seed}`, e);
     return null;
   }
+};
+
+const canonicalizeLinkId = (value: any): string => {
+  if (!value) return "";
+  if (typeof value === "string") return normalizeId(value);
+  if (typeof value === "object") {
+    const raw = value.id || value.name || "";
+    return normalizeId(raw);
+  }
+  return "";
+};
+
+const jsSimilarity = (p: Record<string, number>, q: Record<string, number>) => {
+  const roles = new Set([...Object.keys(p), ...Object.keys(q)]);
+  let divergence = 0;
+  roles.forEach((role) => {
+    const pVal = p[role] ?? 0;
+    const qVal = q[role] ?? 0;
+    const m = (pVal + qVal) / 2;
+    if (pVal > 0) divergence += pVal * Math.log(pVal / (m || 1));
+    if (qVal > 0) divergence += qVal * Math.log(qVal / (m || 1));
+  });
+  const js = divergence / 2;
+  return Math.max(0, 1 - js / Math.log(2));
+};
+
+const evaluateCompleteness = (graph: UnifiedGraph, trackedSeeds: string[]): GraphCompleteness => {
+  const nodes = graph?.nodes || [];
+  const links = graph?.links || [];
+  const sources = graph?.sources || [];
+  if (nodes.length === 0) {
+    return {
+      score: 0,
+      seedCoverage: 0,
+      roleDiversity: 0,
+      depthReach: 0,
+      sourceDensity: 0,
+      novelty: 0,
+      underCoveredSeeds: [],
+      missingRoles: ROLE_KEYS,
+      frontierNodes: [],
+      recommendedSeeds: [],
+      highImpactNodes: [],
+    };
+  }
+
+  const nodeMap = new Map<string, GraphNode>();
+  const degreeMap = new Map<string, number>();
+  const adjacency = new Map<string, Set<string>>();
+  nodes.forEach((node) => {
+    const id = node.id || normalizeId(node.name);
+    if (!id) return;
+    nodeMap.set(id, node);
+    degreeMap.set(id, 0);
+    adjacency.set(id, new Set());
+  });
+
+  const uniqueSourceIds = new Set<number>();
+
+  links.forEach((link) => {
+    const src = canonicalizeLinkId(link.source);
+    const tgt = canonicalizeLinkId(link.target);
+    if (!src || !tgt || !degreeMap.has(src) || !degreeMap.has(tgt)) return;
+    degreeMap.set(src, (degreeMap.get(src) || 0) + 1);
+    degreeMap.set(tgt, (degreeMap.get(tgt) || 0) + 1);
+    adjacency.get(src)?.add(tgt);
+    adjacency.get(tgt)?.add(src);
+    (link.sourceIds || []).forEach((id) => {
+      if (typeof id === "number") uniqueSourceIds.add(id);
+    });
+  });
+
+  // Seed coverage
+  const normalizedSeeds = trackedSeeds.map(normalizeId).filter(Boolean);
+  const seedIdsToMeasure = normalizedSeeds.length > 0 ? normalizedSeeds : Array.from(nodeMap.keys());
+  const underCoveredSeeds: string[] = [];
+  let coverageScore = 0;
+  seedIdsToMeasure.forEach((sid) => {
+    const deg = degreeMap.get(sid) ?? 0;
+    const ratio = Math.min(1, deg / SEED_DEGREE_TARGET);
+    coverageScore += ratio;
+    if (ratio < 1) {
+      const label = nodeMap.get(sid)?.name || sid;
+      underCoveredSeeds.push(label);
+    }
+  });
+  const seedCoverage = seedIdsToMeasure.length ? coverageScore / seedIdsToMeasure.length : 1;
+
+  // Role diversity
+  const roleCounts: Record<string, number> = {};
+  nodes.forEach((node) => {
+    const role = node.role || "Other";
+    roleCounts[role] = (roleCounts[role] || 0) + 1;
+  });
+  const totalNodes = nodes.length;
+  const actualDistribution: Record<string, number> = {};
+  ROLE_KEYS.forEach((role) => {
+    actualDistribution[role] = totalNodes ? (roleCounts[role] || 0) / totalNodes : 0;
+  });
+  const roleDiversity = jsSimilarity(actualDistribution, ROLE_EXPECTED_DISTRIBUTION);
+  const missingRoles = ROLE_KEYS.filter((role) => {
+    const expected = ROLE_EXPECTED_DISTRIBUTION[role] ?? 0;
+    if (expected === 0) return false;
+    return actualDistribution[role] < expected * 0.5;
+  });
+
+  // Depth reach + frontier nodes
+  const queue: string[] = [];
+  const depthMap = new Map<string, number>();
+  seedIdsToMeasure.forEach((sid) => {
+    if (nodeMap.has(sid)) {
+      depthMap.set(sid, 0);
+      queue.push(sid);
+    }
+  });
+  if (queue.length === 0 && nodeMap.size > 0) {
+    const first = nodeMap.keys().next().value;
+    depthMap.set(first, 0);
+    queue.push(first);
+  }
+  while (queue.length > 0) {
+    const nodeId = queue.shift()!;
+    const depth = depthMap.get(nodeId) ?? 0;
+    adjacency.get(nodeId)?.forEach((neighbor) => {
+      if (!depthMap.has(neighbor)) {
+        depthMap.set(neighbor, depth + 1);
+        queue.push(neighbor);
+      }
+    });
+  }
+  const reachedNodes = depthMap.size || 1;
+  let depthSum = 0;
+  let maxDepth = 0;
+  depthMap.forEach((depth) => {
+    depthSum += depth;
+    if (depth > maxDepth) maxDepth = depth;
+  });
+  const depthReach = Math.min(1, (depthSum / reachedNodes) / DEPTH_TARGET);
+  const frontierNodes = Array.from(depthMap.entries())
+    .filter(([_, depth]) => depth === maxDepth && maxDepth > 0)
+    .map(([id]) => ({ id, node: nodeMap.get(id) }))
+    .filter(({ node }) => !!node)
+    .filter(({ id }) => (degreeMap.get(id) || 0) <= 2)
+    .map(({ id, node }) => ({ id, name: node!.name, role: node!.role }));
+
+  // Source density
+  const linksWithEvidence = links.filter((link) => Array.isArray(link.sourceIds) && link.sourceIds.length > 0).length;
+  const linkEvidenceRatio = links.length ? linksWithEvidence / links.length : 0;
+  const sourceUsageRatio = sources.length ? Math.min(1, uniqueSourceIds.size / sources.length) : 0;
+  const sourceDensity = 0.5 * (linkEvidenceRatio + sourceUsageRatio);
+
+  // Novelty via entropy of degrees
+  const degrees = Array.from(degreeMap.values());
+  const totalDegree = degrees.reduce((acc, val) => acc + val, 0);
+  let novelty = 0;
+  if (degreeMap.size <= 1) {
+    novelty = degreeMap.size === 1 ? 1 : 0;
+  } else if (totalDegree > 0) {
+    let entropy = 0;
+    degreeMap.forEach((deg) => {
+      if (deg <= 0) return;
+      const p = deg / totalDegree;
+      entropy -= p * Math.log(p);
+    });
+    const maxEntropy = Math.log(Math.max(2, degreeMap.size));
+    novelty = Math.min(1, entropy / (maxEntropy || 1));
+  }
+  const highImpactNodes = Array.from(degreeMap.entries())
+    .sort((a, b) => (b[1] || 0) - (a[1] || 0))
+    .slice(0, 5)
+    .map(([id, deg]) => ({ id, name: nodeMap.get(id)?.name || id, degree: deg || 0 }));
+
+  const recommendedSeeds = [
+    ...frontierNodes.map((n) => n.name),
+    ...underCoveredSeeds,
+  ].filter(Boolean)
+    .filter((name, idx, arr) => arr.findIndex((n) => n.toLowerCase() === name.toLowerCase()) === idx)
+    .slice(0, 5);
+
+  const score =
+    0.25 * seedCoverage +
+    0.2 * roleDiversity +
+    0.2 * depthReach +
+    0.2 * sourceDensity +
+    0.15 * novelty;
+
+  return {
+    score: Math.min(1, Math.max(0, score)),
+    seedCoverage,
+    roleDiversity,
+    depthReach,
+    sourceDensity,
+    novelty,
+    underCoveredSeeds,
+    missingRoles,
+    frontierNodes,
+    recommendedSeeds,
+    highImpactNodes,
+  };
 };
 
 const countValidLinks = (result: any) => {
@@ -346,7 +560,8 @@ export const runPipeline = async (
   onStatus: (status: PipelineStatus) => void,
   onGraphUpdate: (graph: UnifiedGraph) => void,
   onTopicInferred?: (topic: string) => void,
-  onSeedsInferred?: (seeds: string[]) => void
+  onSeedsInferred?: (seeds: string[]) => void,
+  onCompletenessUpdate?: (metrics: GraphCompleteness) => void,
 ): Promise<UnifiedGraph> => {
   let { seeds, topic } = request;
   // Normalize and de-duplicate seeds up front to avoid duplicate Core nodes
@@ -484,65 +699,135 @@ export const runPipeline = async (
     });
   };
 
+  const trackedSeedIds = new Set(seedSet);
   // --- STAGE 1: SEED ANALYSIS ---
   onStatus({ stage: 'agent-s', message: `Agent S: Analyzing seeds for '${topic}'...`, progress: 10 });
-  
-  const seedResults = await Promise.all(seeds.map(seed => runAgentSWithRetry(seed, topic, seedLayerMap.get(normalizeId(seed)))));
-  
-  seedResults.forEach(result => {
-    if (!result) return;
-    
-    if (Array.isArray(result.nodes)) {
-      result.nodes.forEach(node => {
-        const isSeed = seedSet.has(normalizeId(node.name)) || seedSet.has(normalizeId(node.id));
-        if (isSeed) {
-            node.role = 'Core';
-            const layerName = seedLayerMap.get(normalizeId(node.name)) || seedLayerMap.get(normalizeId(node.id));
-            if (layerName) node.layer = layerName;
-        }
 
-        const merged = mergeNode(node);
-        // ensure raw->canonical map knows about provided ids/names
-        if (node.id) registerCanonical(node.id, normalizeId(node.id));
-        if (node.name) registerCanonical(node.name, normalizeId(node.name));
-        if (!merged) return;
-      });
-    }
-
-    // Normalize sources first to establish id remapping
-    const currentMaxId = Math.max(0, ...consolidatedGraph.sources.map(s => s.id));
-    let nextSourceId = currentMaxId + 1;
-    const sourceIdMap = new Map<number, number>();
-    const normalizedSources: GraphSource[] = [];
-
-    if (Array.isArray(result.sources)) {
-      result.sources.forEach((s: any) => {
-        if (!s || typeof s !== 'object') return;
-        if (typeof s.id !== 'number') return;
-        if (!isValidHttpUrl(s.url)) return;
-        const newId = nextSourceId++;
-        sourceIdMap.set(s.id, newId);
-        normalizedSources.push({
-          id: newId,
-          title: s.title || s.url,
-          url: s.url,
-          note: s.note || ''
-        });
-      });
-    }
-
-    if (Array.isArray(result.links)) {
-      result.links.forEach((link: any) => {
-        const mappedIds = Array.isArray(link.sourceIds)
-          ? link.sourceIds.map((id: any) => sourceIdMap.get(id)).filter((id: any) => typeof id === 'number')
-          : [];
-        if (!mappedIds.length) return;
-        addLink({ ...link, sourceIds: mappedIds });
-      });
-    }
-
-    normalizedSources.forEach(src => consolidatedGraph.sources.push(src));
+  const processedSeeds = new Set<string>();
+  const pendingSeeds = [...seeds];
+  const pendingCanonical = new Set<string>();
+  pendingSeeds.forEach(seedName => {
+    const cid = normalizeId(seedName);
+    if (cid) pendingCanonical.add(cid);
   });
+  let latestCompleteness: GraphCompleteness | null = null;
+
+  const processSeedBatch = async (batch: string[]) => {
+    if (!batch.length) return;
+    const batchResults = await Promise.all(
+      batch.map(seed => runAgentSWithRetry(seed, topic, seedLayerMap.get(normalizeId(seed))))
+    );
+
+    batchResults.forEach(result => {
+      if (!result) return;
+      
+      if (Array.isArray(result.nodes)) {
+        result.nodes.forEach(node => {
+          const isSeed = seedSet.has(normalizeId(node.name)) || seedSet.has(normalizeId(node.id));
+          if (isSeed) {
+              node.role = 'Core';
+              const layerName = seedLayerMap.get(normalizeId(node.name)) || seedLayerMap.get(normalizeId(node.id));
+              if (layerName) node.layer = layerName;
+          }
+
+          const merged = mergeNode(node);
+          if (node.id) registerCanonical(node.id, normalizeId(node.id));
+          if (node.name) registerCanonical(node.name, normalizeId(node.name));
+          if (!merged) return;
+        });
+      }
+
+      const currentMaxId = Math.max(0, ...consolidatedGraph.sources.map(s => s.id));
+      let nextSourceId = currentMaxId + 1;
+      const sourceIdMap = new Map<number, number>();
+      const normalizedSources: GraphSource[] = [];
+
+      if (Array.isArray(result.sources)) {
+        result.sources.forEach((s: any) => {
+          if (!s || typeof s !== 'object') return;
+          if (typeof s.id !== 'number') return;
+          if (!isValidHttpUrl(s.url)) return;
+          const newId = nextSourceId++;
+          sourceIdMap.set(s.id, newId);
+          normalizedSources.push({
+            id: newId,
+            title: s.title || s.url,
+            url: s.url,
+            note: s.note || ''
+          });
+        });
+      }
+
+      if (Array.isArray(result.links)) {
+        result.links.forEach((link: any) => {
+          const mappedIds = Array.isArray(link.sourceIds)
+            ? link.sourceIds.map((id: any) => sourceIdMap.get(id)).filter((id: any) => typeof id === 'number')
+            : [];
+          if (!mappedIds.length) return;
+          addLink({ ...link, sourceIds: mappedIds });
+        });
+      }
+
+      normalizedSources.forEach(src => consolidatedGraph.sources.push(src));
+    });
+
+    emitUpdate();
+  };
+
+  for (let round = 0; round < MAX_SEED_ROUNDS && pendingSeeds.length > 0; round++) {
+    const currentBatch = pendingSeeds.splice(0, pendingSeeds.length);
+    await processSeedBatch(currentBatch);
+    currentBatch.forEach(seedName => {
+      const cid = normalizeId(seedName);
+      if (!cid) return;
+      processedSeeds.add(cid);
+      pendingCanonical.delete(cid);
+    });
+
+    latestCompleteness = evaluateCompleteness(consolidatedGraph, Array.from(trackedSeedIds));
+    consolidatedGraph.completeness = latestCompleteness;
+    if (latestCompleteness && onCompletenessUpdate) onCompletenessUpdate(latestCompleteness);
+
+    if (round >= MAX_SEED_ROUNDS - 1) break;
+    if (!latestCompleteness || latestCompleteness.score >= COMPLETENESS_EXPAND_THRESHOLD) break;
+
+    const nextSeeds: string[] = [];
+    for (const node of latestCompleteness.frontierNodes) {
+      const cid = normalizeId(node.id || node.name);
+      const label = node.name?.trim();
+      if (!cid || !label) continue;
+      if (processedSeeds.has(cid) || pendingCanonical.has(cid)) continue;
+      nextSeeds.push(label);
+      pendingCanonical.add(cid);
+      seedSet.add(cid);
+      seedLayerMap.set(cid, node.role ? `${node.role} Frontier` : 'Frontier Expansion');
+      if (nextSeeds.length >= FRONTIER_SEED_LIMIT) break;
+    }
+
+    if (nextSeeds.length === 0 && latestCompleteness.underCoveredSeeds.length > 0) {
+      for (const seedName of latestCompleteness.underCoveredSeeds) {
+        const cid = normalizeId(seedName);
+        const label = seedName.trim();
+        if (!cid || !label) continue;
+        if (processedSeeds.has(cid) || pendingCanonical.has(cid)) continue;
+        nextSeeds.push(label);
+        pendingCanonical.add(cid);
+        seedSet.add(cid);
+        if (nextSeeds.length >= FRONTIER_SEED_LIMIT) break;
+      }
+    }
+
+    if (nextSeeds.length === 0) break;
+    nextSeeds.forEach(name => {
+      const cid = normalizeId(name);
+      if (!cid) return;
+      pendingCanonical.add(cid);
+      if (!seedLayerMap.has(cid)) {
+        seedLayerMap.set(cid, 'Frontier Expansion');
+      }
+    });
+    pendingSeeds.push(...nextSeeds);
+  }
 
   emitUpdate();
 
@@ -635,6 +920,11 @@ export const runPipeline = async (
     consolidatedGraph.report = report;
     consolidatedGraph.summary = report.themeOverview;
   }
+
+  const finalCompleteness = evaluateCompleteness(consolidatedGraph, Array.from(trackedSeedIds));
+  consolidatedGraph.completeness = finalCompleteness;
+  if (onCompletenessUpdate) onCompletenessUpdate?.(finalCompleteness);
+  emitUpdate();
 
   // Persist the full graph (nodes, links, sources, summary/report) to the DB API
   try {

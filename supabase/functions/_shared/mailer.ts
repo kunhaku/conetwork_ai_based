@@ -8,6 +8,12 @@
 // These values are read at runtime; keep secrets in Supabase, not in source.
 
 import { SmtpClient } from "https://deno.land/x/smtp@v0.7.0/mod.ts";
+import { writeAll } from "https://deno.land/std@0.177.0/streams/write_all.ts";
+
+// smtp client expects deprecated Deno.writeAll (removed in Deno 2). Provide shim.
+if (!(Deno as any).writeAll) {
+  (Deno as any).writeAll = writeAll;
+}
 
 export interface SendEmailParams {
   to: string;
