@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import LandingPage from './LandingPage.tsx';
 import BetaGate from './components/BetaGate';
 import BetaTerms from './components/BetaTerms';
+import AdminInvites from './components/AdminInvites';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -14,33 +15,29 @@ const root = ReactDOM.createRoot(rootElement);
 const path = window.location.pathname || '/';
 const useApp = path === '/app' || path.startsWith('/app/');
 const useTerms = path === '/beta-terms' || path === '/privacy' || path === '/terms';
+const useAdminInvites = path === '/admin/invites';
 
 const RootApp: React.FC = () => {
-  const validCodes = useMemo(() => ['BETA2025', 'NEXUSBETA'], []);
   const [betaAccess, setBetaAccess] = useState(false);
 
   useEffect(() => {
     if (!useApp) return;
-    const params = new URLSearchParams(window.location.search);
-    const invite = params.get('invite') || '';
     const hasStored = localStorage.getItem('beta_access') === '1';
-    const hasValidInvite = validCodes.includes(invite.trim());
-    if (hasValidInvite) {
-      localStorage.setItem('beta_access', '1');
-      setBetaAccess(true);
-      return;
-    }
     if (hasStored) {
       setBetaAccess(true);
     }
-  }, [useApp, validCodes]);
+  }, [useApp]);
 
   if (useTerms) {
     return <BetaTerms />;
   }
 
+  if (useAdminInvites) {
+    return <AdminInvites />;
+  }
+
   if (useApp && !betaAccess) {
-    return <BetaGate onUnlock={() => setBetaAccess(true)} validCodes={validCodes} />;
+    return <BetaGate onUnlock={() => setBetaAccess(true)} />;
   }
 
   return useApp ? <App /> : <LandingPage />;

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { verifyBetaInvite } from '../services/inviteAdminApi';
 
 interface BetaGateProps {
   onUnlock: () => void;
-  validCodes: string[];
 }
 
 const BetaGate: React.FC<BetaGateProps> = ({ onUnlock, validCodes }) => {
@@ -11,6 +11,7 @@ const BetaGate: React.FC<BetaGateProps> = ({ onUnlock, validCodes }) => {
   const WAITLIST_VERIFY_CODE_ENDPOINT = import.meta.env.VITE_WAITLIST_VERIFY_CODE_ENDPOINT as string | undefined;
   const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
   const [inviteCode, setInviteCode] = useState('');
+  const [inviteStatus, setInviteStatus] = useState<'idle' | 'verifying' | 'verified'>('idle');
   const [gateError, setGateError] = useState('');
   const [waitlistEmail, setWaitlistEmail] = useState('');
   const [waitlistEmailConfirm, setWaitlistEmailConfirm] = useState('');
@@ -29,6 +30,14 @@ const BetaGate: React.FC<BetaGateProps> = ({ onUnlock, validCodes }) => {
     return () => window.clearTimeout(t);
   }, [cooldown]);
 
+  useEffect(() => {
+    const storedEmail = localStorage.getItem('beta_invite_email');
+    if (storedEmail) {
+      setWaitlistEmail(storedEmail);
+      setWaitlistEmailConfirm(storedEmail);
+    }
+  }, []);
+
   const emailsValid = () => {
     if (!waitlistEmail.trim() || !waitlistEmailConfirm.trim()) {
       setGateError('Please enter and confirm your email.');
@@ -41,13 +50,36 @@ const BetaGate: React.FC<BetaGateProps> = ({ onUnlock, validCodes }) => {
     return true;
   };
 
-  const handleValidate = () => {
-    if (validCodes.includes(inviteCode.trim())) {
-      localStorage.setItem('beta_access', '1');
-      onUnlock();
-      window.location.href = '/app';
-    } else {
-      setGateError('Invalid invite code. Please double-check or join the waitlist.');
+  const handleValidate = async () => {
+    setGateError('');
+    if (!waitlistEmail.trim()) {
+      setGateError('Please enter the email tied to your invite.');
+      return;
+    }
+    if (!inviteCode.trim()) {
+      setGateError('Enter your invite code.');
+      return;
+    }
+    setInviteStatus('verifying');
+    try {
+      const res = await verifyBetaInvite({
+        email: waitlistEmail.trim().toLowerCase(),
+        code: inviteCode.trim(),
+      });
+      if (res.ok) {
+        setInviteStatus('verified');
+        localStorage.setItem('beta_access', '1');
+        localStorage.setItem('beta_invite_email', waitlistEmail.trim().toLowerCase());
+        onUnlock();
+        window.location.href = '/app';
+      } else {
+        setInviteStatus('idle');
+        setGateError(`Invite invalid: ${res.error}${res.detail ? ` - ${res.detail}` : ''}`);
+      }
+    } catch (err) {
+      console.error('[beta-gate] verify invite error', err);
+      setInviteStatus('idle');
+      setGateError('Unable to verify invite code right now. Please try again.');
     }
   };
 
@@ -188,6 +220,17 @@ const BetaGate: React.FC<BetaGateProps> = ({ onUnlock, validCodes }) => {
         </div>
 
         <div className="space-y-2">
+          <label className="text-xs text-gray-400">Invite email</label>
+          <input
+            type="email"
+            value={waitlistEmail}
+            onChange={(e) => setWaitlistEmail(e.target.value)}
+            placeholder="Email used for your invite"
+            className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+          />
+        </div>
+
+        <div className="space-y-2">
           <label className="text-xs text-gray-400">Invite code</label>
           <div className="flex gap-2">
             <input
@@ -199,9 +242,14 @@ const BetaGate: React.FC<BetaGateProps> = ({ onUnlock, validCodes }) => {
             <button
               type="button"
               onClick={handleValidate}
-              className="px-4 py-2 bg-cyan-500 text-white rounded-lg text-sm font-semibold hover:bg-cyan-400 transition"
+              disabled={inviteStatus === 'verifying'}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+                inviteStatus === 'verifying'
+                  ? 'bg-white/10 text-gray-300 border border-white/10 cursor-not-allowed'
+                  : 'bg-cyan-500 text-white hover:bg-cyan-400'
+              }`}
             >
-              Enter App
+              {inviteStatus === 'verifying' ? 'Verifying...' : inviteStatus === 'verified' ? 'Verified' : 'Enter App'}
             </button>
           </div>
         </div>
