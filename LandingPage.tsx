@@ -5,11 +5,11 @@ import { HeroOverlay } from './components/landing/HeroOverlay';
 import DemoBox from './components/landing/DemoBox';
 
 const pipeline = [
-  { title: 'Evidence Intake', desc: 'Collect recent news, IR/press, SEC, Wiki; keep reachable URLs only.' },
-  { title: 'Signal Extraction', desc: 'Extract nodes and links strictly from cited sources; every edge is clickable.' },
-  { title: 'Cross-Validation', desc: 'Deduplicate and keep 10-20 highest-signal relationships.' },
-  { title: 'Financial & Qualitative', desc: 'Ticker/price/cap plus growth profile, themes, risk notes.' },
-  { title: 'Briefing & Actions', desc: 'Key players, hidden bets, risks, and next steps in an executive brief.' },
+  { title: 'Evidence Intake', desc: 'Ingest recent disclosures, news, PR, SEC, and Wiki; retain only verifiable URLs.' },
+  { title: 'Signal Extraction', desc: 'Extract entities and relationships strictly from citations; every link opens the source.' },
+  { title: 'Cross-Validation', desc: 'Merge duplicates, reconcile conflicts, and surface 10-20 strongest connections.' },
+  { title: 'Financial & Qualitative', desc: 'Generate a combined view: valuation-relevant metrics, catalysts, narratives, risks.' },
+  { title: 'Briefing & Actions', desc: 'Produce a decision-ready brief: who matters, why it matters, what to do next.' },
 ];
 
 const flowSteps = [
